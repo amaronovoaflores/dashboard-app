@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Flotas">
 <title>Dashboard Flotas</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBjOBgEngBzLZh1yiF1bkq4C-KtdiILHCI" async defer></script>
 <style>
 :root{
   --navy:#0d1b2a;--teal:#E1F5EE;--teal-mid:#0F6E56;--gold:#BA7517;
@@ -257,6 +258,7 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
   <button id="menu-tareo" class="mbtn active" onclick="switchPage('tareo')"><i class="ti ti-clipboard-list" aria-hidden="true"></i> Tareo</button>
   <button id="menu-val" class="mbtn" onclick="switchPage('val')"><i class="ti ti-file-invoice" aria-hidden="true"></i> Valorización</button>
   <button id="menu-status" class="mbtn" onclick="switchPage('status')"><i class="ti ti-activity" aria-hidden="true"></i> Status</button>
+  <button id="menu-mapa" class="mbtn" onclick="switchPage('mapa')"><i class="ti ti-map-pin" aria-hidden="true"></i> Mapa</button>
   <button id="menu-hist" class="mbtn" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
 </div>
 
@@ -444,6 +446,22 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
       <div class="res-i"><div class="res-l">Resultado (S/)</div><div class="res-v" id="res-s">—</div><div class="res-s" id="res-ss">Marca días en tareo</div></div>
       <div class="res-i"><div class="res-l">Por kms</div><div class="res-v" id="res-k">—</div><div class="res-s" id="res-ks">—</div></div>
     </div>
+  </div>
+</div>
+
+<!-- PÁGINA MAPA -->
+<div id="page-mapa" style="display:none;">
+  <div class="sec"><span class="sec-t">🗺 Ubicación de la flota</span><span class="sec-s" id="mapa-sub">—</span></div>
+  <div class="cal-legend">
+    <span><span class="ldot" style="background:#0F6E56;border:1px solid #0F6E56"></span>Activo</span>
+    <span><span class="ldot" style="background:#A32D2D;border:1px solid #A32D2D"></span>Standby (sin moverse, sin cliente)</span>
+  </div>
+  <div id="mapa-container" style="width:100%;height:380px;border-radius:10px;border:0.5px solid var(--border);margin-bottom:1rem;background:var(--bg2);display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:13px;">Cargando mapa…</div>
+  <div class="sw" style="max-height:320px;">
+    <table class="dt">
+      <thead><tr><th>Placa</th><th>Departamento</th><th>Provincia</th><th>Estado</th><th>Posición al</th></tr></thead>
+      <tbody id="mapa-tb"></tbody>
+    </table>
   </div>
 </div>
 
@@ -1585,6 +1603,132 @@ function buildTarjetaSoat(){
   '</div>';
 }
 
+// ── MAPA DE FLOTA ─────────────────────────────────────────────────────────
+// Se carga bajo demanda (solo al entrar a la página Mapa), no en el arranque
+// del dashboard — a diferencia de SOAT, que necesita estar siempre listo
+// para las alertas. Standby = se movió menos de 10km en 7 días Y no tiene
+// cliente asignado (ej. parqueado sin contrato, no solo un día tranquilo).
+var MAPA_CARGADO=false;
+var POSICIONES_TODAS={}; // placa -> {lat, lon, departamento, provincia, fecha_posicion}
+var KM_SEMANA_TODAS={};  // placa -> suma de kms de los últimos 7 días
+var GMAP_INSTANCE=null;
+var KM_STANDBY_UMBRAL=10;
+
+function fetchJSONConFallback(nombreArchivo,callback){
+  var urls=[nombreArchivo+'?t='+Date.now(), GH_RAW+nombreArchivo+'?t='+Date.now()];
+  function tryUrl(idx){
+    if(idx>=urls.length){callback(null);return;}
+    var xhr=new XMLHttpRequest();xhr.open('GET',urls[idx],true);xhr.timeout=8000;
+    xhr.onload=function(){
+      if(xhr.status===200){
+        try{var d=JSON.parse(xhr.responseText);callback(d);return;}catch(e){}
+      }
+      tryUrl(idx+1);
+    };
+    xhr.onerror=function(){tryUrl(idx+1);};xhr.ontimeout=function(){tryUrl(idx+1);};xhr.send();
+  }
+  tryUrl(0);
+}
+
+function cargarMapaSiNecesario(){
+  if(MAPA_CARGADO){renderMapa();return;}
+  var vehiculos=CFG.vehiculos||[];
+  if(vehiculos.length===0){MAPA_CARGADO=true;renderMapa();return;}
+  var pendientes=vehiculos.length*2;
+  function checkDone(){pendientes--;if(pendientes<=0){MAPA_CARGADO=true;renderMapa();}}
+  vehiculos.forEach(function(v){
+    var slug=v.placa.replace('-','');
+    fetchJSONConFallback('datos_posicion_'+slug+'.json',function(d){
+      if(d&&d.lat&&d.lon) POSICIONES_TODAS[v.placa]=d;
+      checkDone();
+    });
+    fetchJSONConFallback('datos_hunter_'+slug+'.json',function(d){
+      if(d&&d.dias){
+        var hoy=new Date(),suma=0;
+        for(var i=0;i<7;i++){
+          var f=new Date(hoy);f.setDate(f.getDate()-i);
+          var key=f.toISOString().slice(0,10);
+          if(d.dias[key]) suma+=(d.dias[key].km||0);
+        }
+        KM_SEMANA_TODAS[v.placa]=suma;
+      }
+      checkDone();
+    });
+  });
+}
+
+function esPlacaStandby(placa,asignado){
+  var km7d=KM_SEMANA_TODAS[placa]||0;
+  return km7d<KM_STANDBY_UMBRAL && !asignado;
+}
+
+function renderMapa(){
+  var cont=$('mapa-container');
+  if(!cont) return;
+  if(typeof google==='undefined'||!google.maps){
+    cont.innerHTML='<div style="padding:20px;">Cargando Google Maps…</div>';
+    setTimeout(renderMapa,500);
+    return;
+  }
+  var puntos=[];
+  (CFG.vehiculos||[]).forEach(function(v){
+    var pos=POSICIONES_TODAS[v.placa];
+    if(pos) puntos.push({v:v,pos:pos});
+  });
+  set('mapa-sub',puntos.length+' de '+(CFG.vehiculos||[]).length+' placas con posición GPS');
+
+  if(!GMAP_INSTANCE){
+    cont.innerHTML='';
+    GMAP_INSTANCE=new google.maps.Map(cont,{
+      center:puntos.length?{lat:puntos[0].pos.lat,lng:puntos[0].pos.lon}:{lat:-9.19,lng:-75.02},
+      zoom:puntos.length?6:5
+    });
+  }
+
+  var bounds=new google.maps.LatLngBounds();
+  var infoWindow=new google.maps.InfoWindow();
+  puntos.forEach(function(p){
+    var standby=esPlacaStandby(p.v.placa,p.v.asignado);
+    var color=standby?'#A32D2D':'#0F6E56';
+    var marker=new google.maps.Marker({
+      position:{lat:p.pos.lat,lng:p.pos.lon},
+      map:GMAP_INSTANCE,
+      title:p.v.placa,
+      icon:{path:google.maps.SymbolPath.CIRCLE,scale:8,fillColor:color,fillOpacity:1,strokeColor:'#fff',strokeWeight:2}
+    });
+    marker.addListener('click',function(){
+      infoWindow.setContent('<div style="font-family:sans-serif;font-size:13px;"><strong>'+p.v.placa+'</strong><br>'+
+        (p.v.descripcion||'')+'<br>'+(standby?'Standby':'Activo')+' · '+(p.pos.departamento||'—')+', '+(p.pos.provincia||'—')+'<br>'+
+        'Posición al '+(p.pos.fecha_posicion||'—')+'</div>');
+      infoWindow.open(GMAP_INSTANCE,marker);
+    });
+    bounds.extend(marker.getPosition());
+  });
+  if(puntos.length>1) GMAP_INSTANCE.fitBounds(bounds);
+  else if(puntos.length===1) GMAP_INSTANCE.setCenter(bounds.getCenter());
+
+  renderTablaMapa(puntos);
+}
+
+function renderTablaMapa(puntos){
+  var tb=$('mapa-tb');if(!tb) return;
+  tb.innerHTML='';
+  if(puntos.length===0){
+    tb.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:16px;">Sin datos de posición todavía</td></tr>';
+    return;
+  }
+  puntos.forEach(function(p){
+    var standby=esPlacaStandby(p.v.placa,p.v.asignado);
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td style="font-weight:500;">'+p.v.placa+'</td>'+
+      '<td>'+(p.pos.departamento||'—')+'</td>'+
+      '<td>'+(p.pos.provincia||'—')+'</td>'+
+      '<td>'+(standby?'<span style="color:var(--red);">● Standby</span>':'<span style="color:var(--teal-mid);">● Activo</span>')+'</td>'+
+      '<td>'+(p.pos.fecha_posicion||'—')+'</td>';
+    tb.appendChild(tr);
+  });
+}
+
 function renderStatus(){
   if(!CFG||!VEH) return;
   var content=$('status-content');
@@ -1724,12 +1868,13 @@ var CURRENT_PAGE='tareo';
 function switchPage(page){
   CURRENT_PAGE=page;
   // Ocultar todas las páginas
-  var pages=['panel-tareo','panel-val','page-status','page-historial'];
+  var pages=['panel-tareo','panel-val','page-status','page-mapa','page-historial'];
   // Las páginas principales son las secciones .pw
   document.querySelectorAll('.pw').forEach(function(el){el.style.display='none';});
-  var ph=$('page-historial'),ps=$('page-status');
+  var ph=$('page-historial'),ps=$('page-status'),pm=$('page-mapa');
   if(ph) ph.style.display='none';
   if(ps) ps.style.display='none';
+  if(pm) pm.style.display='none';
 
   if(page==='tareo'||page==='val'){
     document.querySelectorAll('.pw').forEach(function(el){
@@ -1742,6 +1887,8 @@ function switchPage(page){
     }
   } else if(page==='status'){
     if(ps){ps.style.display='block';renderStatus();}
+  } else if(page==='mapa'){
+    if(pm){pm.style.display='block';cargarMapaSiNecesario();}
   } else if(page==='historial'){
     if(ph){ph.style.display='block';renderHistorial();}
   }
