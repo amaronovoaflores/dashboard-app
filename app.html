@@ -358,7 +358,7 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
     <div class="kc"><div class="kl">Kms recorridos</div><div class="kv teal" id="kpi-km">—</div><div class="ks" id="kpi-km-s">—</div></div>
     <div class="kc"><div class="kl">Promedio diario</div><div class="kv" id="kpi-prom">—</div><div class="ks">Días con movimiento</div></div>
     <div class="kc"><div class="kl">% Actividad</div><div class="kv gold" id="kpi-act">0%</div><div class="ks" id="kpi-act-s">—</div></div>
-    <div class="kc dk"><div class="kl">Último odómetro</div><div class="kv" id="kpi-odo">—</div><div class="ks" id="kpi-odo-s">—</div></div>
+    <div class="kc dk" id="kpi-odo-card"><div class="kl">Último odómetro</div><div class="kv" id="kpi-odo">—</div><div class="ks" id="kpi-odo-s">—</div></div>
   </div>
   <div class="act-wrap">
     <div class="act-lbl"><span>Actividad — días marcados para tareo</span><span id="act-lbl-txt">—</span></div>
@@ -376,14 +376,14 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
   </div>
   <p class="mt">Detalle por día <span style="font-weight:400;font-size:10px;opacity:.7">↕ desliza</span></p>
   <div class="sw"><table class="dt"><thead><tr><th>Día</th><th class="r">Odóm. ini</th><th class="r">Odóm. fin</th><th class="r">Kms</th><th class="r">Estado</th></tr></thead><tbody id="daily-tb"></tbody></table></div>
-  <div class="odo">
+  <div class="odo" id="odo-pill">
     <div><div class="odo-l">⚡ Último odómetro</div><div class="odo-v" id="odo-v">—</div></div>
     <div class="odo-d"><strong id="odo-f">—</strong>Actualizado</div>
   </div>
 </div>
 
 <!-- PÁGINA 3: ECONÓMICO -->
-<div class="pw">
+<div class="pw" id="page-economico">
   <div class="sec"><span class="sec-t">💰 Análisis Económico</span><span class="sec-s" id="t3-sub">—</span></div>
   <div class="kpi3">
     <div class="kc dk"><div class="kl">Costo total mes</div><div class="kv" id="kpi-eg">—</div><div class="ks" id="kpi-eg-s">—</div></div>
@@ -469,6 +469,7 @@ var TOPE_LLANTA=60000, TRAMO_KM=5000;
 var EG_T=0, EG_KM=0;
 var marcados={}, ING={t:0,v:0,i:0};
 var SOAT_DATA=null;
+var SOAT_TODAS={}; // placa -> datos_soat, para alertas agregadas de toda la flota
 
 // ── UTILIDADES ─────────────────────────────────────────────────────────
 function $(id){return document.getElementById(id);}
@@ -503,6 +504,36 @@ function cargarConfig(){
     xhr.send();
   }
   tryUrl(0);
+}
+
+// ── PERMISOS (configurados por Amaro en dashboard-admin por cliente) ────
+// Solo se hacen cumplir los que corresponden a algo que el dashboard del
+// cliente realmente puede mostrar/ocultar hoy. El resto (editar_empresa,
+// editar_cuentas, editar_tarifas, agregar_mantos, cambiar_asignacion,
+// mes_completo, tareo_cliente, editar_tareo, editar_val, ver_placas) quedan
+// reservados: no hay ninguna edición client-side que gatear todavia.
+function permOk(key){
+  var p=CFG&&CFG.permisos;
+  if(!p||p[key]===undefined) return true; // sin dato = se muestra (retrocompatible)
+  return !!p[key];
+}
+
+function aplicarPermisos(){
+  var mVal=$('menu-val'), tVal=$('tab-val');
+  var mostrarVal=permOk('ver_valorizacion');
+  if(mVal) mVal.style.display=mostrarVal?'':'none';
+  if(tVal) tVal.style.display=mostrarVal?'':'none';
+
+  var btnGV=$('btn-guardar-val');
+  if(btnGV) btnGV.style.display=permOk('guardar_val')?'':'none';
+
+  var kpiOdo=$('kpi-odo-card'), odoPill=$('odo-pill');
+  var mostrarOdo=permOk('ver_odometro');
+  if(kpiOdo) kpiOdo.style.display=mostrarOdo?'':'none';
+  if(odoPill) odoPill.style.display=mostrarOdo?'':'none';
+
+  var mTareo=$('menu-tareo');
+  if(mTareo) mTareo.style.display=permOk('tareo_placa')?'':'none';
 }
 
 function inicializarConConfig(){
@@ -578,8 +609,14 @@ function inicializarConConfig(){
     });
   }
 
+  // Permisos (ocultar menú/valorización/odómetro según config.permisos)
+  aplicarPermisos();
+
+  // Alertas SOAT/revisión técnica de TODA la flota (no solo la placa activa)
+  cargarSoatTodasPlacas();
+
   // Inicializar páginas
-  switchPage('tareo');
+  switchPage(permOk('tareo_placa')?'tareo':(permOk('ver_valorizacion')?'val':'status'));
   $('sel-m1').value=String(hoy.getMonth()+1);
   $('sel-a1').value=String(hoy.getFullYear());
 
@@ -611,6 +648,11 @@ function seleccionarVehiculo(idx){
 }
 
 // ── SOAT / REVISIÓN TÉCNICA ──────────────────────────────────────────────
+// cargarSoatJSON(): trae el detalle de la placa activa (para la tarjeta en
+// Status → Por placa). Las alertas de vencimiento NO salen de acá — salen
+// de cargarSoatTodasPlacas(), que revisa TODA la flota una sola vez al
+// cargar el dashboard, para que el aviso no dependa de qué placa tengas
+// seleccionada (importante para flotas grandes, "modo masivo").
 function cargarSoatJSON(){
   var placaVeh=VEH.placa;
   var urls=['datos_soat_'+placaVeh.replace('-','')+'.json?t='+Date.now(),
@@ -626,7 +668,7 @@ function cargarSoatJSON(){
       if(xhr.status===200){
         try{
           var d=JSON.parse(xhr.responseText);
-          if(d&&d.placa){SOAT_DATA=d;renderStatus();actualizarAlertasVencimiento();return;}
+          if(d&&d.placa){SOAT_DATA=d;renderStatus();return;}
         }catch(e){}
       }
       tryUrl(idx+1);
@@ -643,26 +685,77 @@ function diasHasta(fechaIso){
   return Math.round((d-new Date(new Date().toDateString()))/86400000);
 }
 
+// Trae datos_soat_{PLACA}.json de TODAS las placas del cliente (no solo la
+// activa) para poder avisar "3 placas con SOAT vencido" de un vistazo.
+function cargarSoatTodasPlacas(){
+  SOAT_TODAS={};
+  var vehiculos=CFG.vehiculos||[];
+  var pendientes=vehiculos.length;
+  if(pendientes===0) return;
+  vehiculos.forEach(function(v){
+    var slug=v.placa.replace('-','');
+    var urls=['datos_soat_'+slug+'.json?t='+Date.now(), GH_RAW+'datos_soat_'+slug+'.json?t='+Date.now()];
+    function tryUrl(idx){
+      if(idx>=urls.length){
+        pendientes--; if(pendientes===0) actualizarAlertasVencimiento();
+        return;
+      }
+      var xhr=new XMLHttpRequest();xhr.open('GET',urls[idx],true);xhr.timeout=8000;
+      xhr.onload=function(){
+        if(xhr.status===200){
+          try{
+            var d=JSON.parse(xhr.responseText);
+            if(d&&d.placa){SOAT_TODAS[v.placa]=d; pendientes--; if(pendientes===0) actualizarAlertasVencimiento(); return;}
+          }catch(e){}
+        }
+        tryUrl(idx+1);
+      };
+      xhr.onerror=function(){tryUrl(idx+1);};xhr.ontimeout=function(){tryUrl(idx+1);};xhr.send();
+    }
+    tryUrl(0);
+  });
+}
+
 function actualizarAlertasVencimiento(){
   var alertasBar=$('alertas-bar');
-  if(!alertasBar||!SOAT_DATA) return;
-  // Limpia solo las alertas dinamicas (dejan las de config.json intactas)
+  if(!alertasBar) return;
+  // Limpia solo las alertas dinamicas (dejan las manuales de config.json intactas)
   alertasBar.querySelectorAll('.alerta-dinamica').forEach(function(el){el.remove();});
-  [['soat','SOAT'],['revision_tecnica','Revisión técnica']].forEach(function(par){
-    var d=SOAT_DATA[par[0]];
-    if(!d||!d.ok||!d.fecha_vencimiento) return;
-    var dias=diasHasta(d.fecha_vencimiento);
-    if(dias===null||dias>30) return;
-    var vencido=dias<0;
+
+  var items=[];
+  Object.keys(SOAT_TODAS).forEach(function(placa){
+    var datos=SOAT_TODAS[placa];
+    [['soat','SOAT'],['revision_tecnica','Revisión técnica']].forEach(function(par){
+      var d=datos[par[0]];
+      if(!d||!d.ok||d.exonerado||!d.fecha_vencimiento) return;
+      var dias=diasHasta(d.fecha_vencimiento);
+      if(dias===null||dias>30) return;
+      items.push({placa:placa, titulo:par[1], dias:dias, vencido:dias<0});
+    });
+  });
+  if(items.length===0) return;
+
+  // Vencidos primero, luego los que vencen antes
+  items.sort(function(a,b){ if(a.vencido!==b.vencido) return a.vencido?-1:1; return a.dias-b.dias; });
+
+  var MAX_CHIPS=5;
+  items.slice(0,MAX_CHIPS).forEach(function(it){
     var chip=document.createElement('div');
     chip.className='alerta-dinamica';
     chip.style.cssText='display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:99px;font-size:13px;font-weight:500;'+
-      (vencido?'background:#FDEAEA;color:#A32D2D;border:1px solid #F0A0A0;':'background:#FAEEDA;color:#854F0B;border:1px solid #FAC775;');
-    chip.textContent=(vencido?'⚠ ':'⏳ ')+par[1]+' de '+SOAT_DATA.placa+' '+
-      (vencido?('venció hace '+Math.abs(dias)+' día(s)'):('vence en '+dias+' día(s)'));
+      (it.vencido?'background:#FDEAEA;color:#A32D2D;border:1px solid #F0A0A0;':'background:#FAEEDA;color:#854F0B;border:1px solid #FAC775;');
+    chip.textContent=(it.vencido?'⚠ ':'⏳ ')+it.titulo+' de '+it.placa+' '+
+      (it.vencido?('venció hace '+Math.abs(it.dias)+' día(s)'):('vence en '+it.dias+' día(s)'));
     alertasBar.appendChild(chip);
-    alertasBar.style.display='flex';
   });
+  if(items.length>MAX_CHIPS){
+    var mas=document.createElement('div');
+    mas.className='alerta-dinamica';
+    mas.style.cssText='display:flex;align-items:center;padding:5px 11px;border-radius:99px;font-size:13px;font-weight:500;background:var(--bg2);color:var(--text2);border:1px solid var(--border);';
+    mas.textContent='+'+(items.length-MAX_CHIPS)+' más';
+    alertasBar.appendChild(mas);
+  }
+  alertasBar.style.display='flex';
 }
 
 function updateHeader(){
@@ -1432,12 +1525,13 @@ function renderStatus(){
             (kmHoy>LIM?'+'+Math.round(kmHoy-LIM):'—')+'</div>'+
             '<div style="font-size:11px;color:var(--text2);text-transform:uppercase;margin-top:2px;">Kms extra</div></div>'+
         '</div>'+
+        (permOk('ver_odometro')?
         '<div style="background:#0d1b2a;border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">'+
           '<div><div style="font-size:11px;color:#9ab8b0;text-transform:uppercase;">Odómetro actual</div>'+
           '<div style="font-size:26px;font-weight:600;color:#FAC775;">'+ODO.toLocaleString()+' kms</div></div>'+
           '<div style="text-align:right;"><div style="font-size:12px;color:#9ab8b0;">Al día '+LAST_DAY+'</div>'+
           '<div style="font-size:12px;color:#5DCAA5;margin-top:2px;">vía '+ODO_SRC+'</div></div>'+
-        '</div>'+
+        '</div>':'')+
       '</div>'+
       buildTarjetaSoat();
   } else {
@@ -1546,7 +1640,9 @@ function switchPage(page){
   if(ps) ps.style.display='none';
 
   if(page==='tareo'||page==='val'){
-    document.querySelectorAll('.pw').forEach(function(el){el.style.display='block';});
+    document.querySelectorAll('.pw').forEach(function(el){
+      el.style.display=(el.id==='page-economico'&&!permOk('ver_economico'))?'none':'block';
+    });
     if(page==='val'){
       $('tab-val').click();
     } else {
