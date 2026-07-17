@@ -310,22 +310,43 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
   <div class="drive-txt" id="drive-txt">⏳ Cargando datos…</div>
 
   <div class="tab-panel active" id="panel-tareo">
-    <div class="cal-legend">
-      <span><span class="ldot" style="background:#9FE1CB;border:1px solid #5DCAA5"></span>Día trabajado (Excel)</span>
-      <span><span class="ldot" style="background:#dbeafe;border:2px solid #2563eb"></span>Día trabajado (GPS 🛰)</span>
-      <span><span class="ldot" style="background:#FAC775;border:1px solid #BA7517"></span>Kms extra (+límite)</span>
+    <div class="tabs" id="tareo-modo-tabs" style="margin-bottom:1rem;">
+      <button class="tab-btn active" id="tmode-placa">Por placa</button>
+      <button class="tab-btn" id="tmode-cliente">Por cliente</button>
     </div>
-    <div class="cal-grid" id="cal-grid"></div>
-    <div class="sum4">
-      <div class="mc"><div class="mc-l">Días trabajados</div><div class="mc-v teal" id="o-dias">0</div></div>
-      <div class="mc"><div class="mc-l">Días con kms extra</div><div class="mc-v gold" id="o-kmd">0</div></div>
-      <div class="mc"><div class="mc-l">Total kms extra</div><div class="mc-v" id="o-kme">0 kms</div></div>
-      <div class="mc"><div class="mc-l">Total kms marcados</div><div class="mc-v teal" id="o-kmt">0 kms</div></div>
+
+    <div id="tareo-vista-placa">
+      <div class="cal-legend">
+        <span><span class="ldot" style="background:#9FE1CB;border:1px solid #5DCAA5"></span>Día trabajado (Excel)</span>
+        <span><span class="ldot" style="background:#dbeafe;border:2px solid #2563eb"></span>Día trabajado (GPS 🛰)</span>
+        <span><span class="ldot" style="background:#FAC775;border:1px solid #BA7517"></span>Kms extra (+límite)</span>
+      </div>
+      <button class="btn-s" id="btn-mes-completo" style="margin-bottom:.75rem;"><i class="ti ti-calendar-event" aria-hidden="true"></i> ☑ Marcar mes completo</button>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="sum4">
+        <div class="mc"><div class="mc-l">Días trabajados</div><div class="mc-v teal" id="o-dias">0</div></div>
+        <div class="mc"><div class="mc-l">Días con kms extra</div><div class="mc-v gold" id="o-kmd">0</div></div>
+        <div class="mc"><div class="mc-l">Total kms extra</div><div class="mc-v" id="o-kme">0 kms</div></div>
+        <div class="mc"><div class="mc-l">Total kms marcados</div><div class="mc-v teal" id="o-kmt">0 kms</div></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn-p" id="btn-pdf-tareo">✓ Imprimir / PDF</button>
+        <button class="btn-s" id="btn-guardar-tareo"><i class="ti ti-device-floppy" aria-hidden="true"></i> Guardar tareo</button>
+        <button class="btn-s" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
+      </div>
     </div>
-    <div class="action-bar">
-      <button class="btn-p" id="btn-pdf-tareo">✓ Imprimir / PDF</button>
-      <button class="btn-s" id="btn-guardar-tareo"><i class="ti ti-device-floppy" aria-hidden="true"></i> Guardar tareo</button>
-      <button class="btn-s" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
+
+    <div id="tareo-vista-cliente" style="display:none;">
+      <div style="margin-bottom:1rem;">
+        <label style="font-size:11px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px;">Cliente / Contratista</label>
+        <select id="tareo-cliente-sel" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;"></select>
+      </div>
+      <div class="sw" style="max-height:400px;">
+        <table class="dt">
+          <thead><tr><th>Placa</th><th>Descripción</th><th class="r">Días marcados</th><th class="r">Kms extra</th><th>Estado del mes</th></tr></thead>
+          <tbody id="tareo-cliente-tb"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -470,6 +491,7 @@ var EG_T=0, EG_KM=0;
 var marcados={}, ING={t:0,v:0,i:0};
 var SOAT_DATA=null;
 var SOAT_TODAS={}; // placa -> datos_soat, para alertas agregadas de toda la flota
+var TAREO_MODO='placa';
 
 // ── UTILIDADES ─────────────────────────────────────────────────────────
 function $(id){return document.getElementById(id);}
@@ -534,6 +556,19 @@ function aplicarPermisos(){
 
   var mTareo=$('menu-tareo');
   if(mTareo) mTareo.style.display=permOk('tareo_placa')?'':'none';
+
+  var btnMC=$('btn-mes-completo');
+  if(btnMC) btnMC.style.display=permOk('mes_completo')?'':'none';
+
+  var tmCliente=$('tmode-cliente');
+  var mostrarTareoCliente=permOk('tareo_cliente');
+  if(tmCliente) tmCliente.style.display=mostrarTareoCliente?'':'none';
+  if(!mostrarTareoCliente && TAREO_MODO==='cliente'){
+    // Si se quito el permiso mientras estaba en modo cliente, volver a placa
+    TAREO_MODO='placa';
+    var tmP=$('tmode-placa');
+    if(tmP){tmP.classList.add('active');$('tareo-vista-placa').style.display='block';$('tareo-vista-cliente').style.display='none';}
+  }
 }
 
 function inicializarConConfig(){
@@ -1020,7 +1055,56 @@ function calcEgresos(){
 }
 
 // ── CALENDARIO ─────────────────────────────────────────────────────────
-function onPeriodChange(){marcados={};cargarMeses();renderAll();}
+function onPeriodChange(){
+  marcados={};cargarMeses();renderAll();
+  if(TAREO_MODO==='cliente') pintarTareoClienteTabla();
+}
+
+// ── TAREO POR CLIENTE ────────────────────────────────────────────────────
+// Tabla de relacion: para el mes seleccionado, muestra el ultimo tareo
+// GUARDADO (desde Historial) de cada placa asignada al cliente elegido.
+// No mezcla estado en vivo entre placas (marcados es global de la placa
+// activa) — se apoya en lo que ya quedo guardado en hist_tareos.
+function renderTareoCliente(){
+  var sel=$('tareo-cliente-sel');
+  var asignados=[];
+  CFG.vehiculos.forEach(function(v){var a=v.asignado||'Standby';if(asignados.indexOf(a)<0)asignados.push(a);});
+  var valorActual=sel.value;
+  sel.innerHTML='';
+  asignados.forEach(function(a){var o=document.createElement('option');o.value=a;o.textContent=a;sel.appendChild(o);});
+  if(valorActual&&asignados.indexOf(valorActual)>=0) sel.value=valorActual;
+  pintarTareoClienteTabla();
+}
+
+function pintarTareoClienteTabla(){
+  var sel=$('tareo-cliente-sel');
+  if(!sel||!sel.value) return;
+  var asignado=sel.value;
+  var vehs=CFG.vehiculos.filter(function(v){return (v.asignado||'Standby')===asignado;});
+  var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
+  var hist=JSON.parse(localStorage.getItem('hist_tareos')||'[]');
+  var tb=$('tareo-cliente-tb');tb.innerHTML='';
+  if(vehs.length===0){
+    tb.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:16px;">Sin vehículos para este cliente</td></tr>';
+    return;
+  }
+  vehs.forEach(function(v){
+    var idxReal=CFG.vehiculos.indexOf(v);
+    var ultimo=hist.find(function(h){return h.placa===v.placa&&h.m1===m1&&h.a1===a1;});
+    var tr=document.createElement('tr');
+    tr.style.cursor='pointer';
+    tr.innerHTML='<td style="font-weight:500;">'+v.placa+'</td>'+
+      '<td>'+(v.descripcion||'—')+'</td>'+
+      '<td class="r">'+(ultimo?ultimo.dias:'—')+'</td>'+
+      '<td class="r">'+(ultimo?ultimo.km_extra+' kms':'—')+'</td>'+
+      '<td>'+(ultimo?'<span style="color:var(--teal-mid);">✓ Guardado '+ultimo.fecha_guardado+'</span>':'<span style="color:var(--text2);">— Sin tareo guardado —</span>')+'</td>';
+    tr.onclick=function(){
+      seleccionarVehiculo(idxReal);
+      $('tmode-placa').click();
+    };
+    tb.appendChild(tr);
+  });
+}
 
 function buildCalendar(){
   var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
@@ -1063,6 +1147,14 @@ function buildCalendar(){
 
 function toggleDay(key,mes,day){
   marcados[key]=!marcados[key];paintCell(key,mes,day);
+  updateVal();updateAct();buildChart();buildDaily();updateConcl();
+}
+function marcarMesCompleto(){
+  for(var d=1;d<=DIAS_N;d++){
+    var key='m1_'+d;
+    marcados[key]=true;
+    paintCell(key,'m1',d);
+  }
   updateVal();updateAct();buildChart();buildDaily();updateConcl();
 }
 function paintCell(key,mes,day){
@@ -1679,6 +1771,24 @@ document.addEventListener('DOMContentLoaded',function(){
   if(btnGT) btnGT.addEventListener('click',guardarTareo);
   var btnGV=document.getElementById('btn-guardar-val');
   if(btnGV) btnGV.addEventListener('click',guardarValorizacion);
+
+  // Mes completo
+  var btnMC=$('btn-mes-completo');
+  if(btnMC) btnMC.addEventListener('click',marcarMesCompleto);
+
+  // Tareo: Por placa / Por cliente
+  var tmP=$('tmode-placa'),tmC=$('tmode-cliente');
+  if(tmP) tmP.addEventListener('click',function(){
+    TAREO_MODO='placa';tmP.classList.add('active');tmC.classList.remove('active');
+    $('tareo-vista-placa').style.display='block';$('tareo-vista-cliente').style.display='none';
+  });
+  if(tmC) tmC.addEventListener('click',function(){
+    TAREO_MODO='cliente';tmC.classList.add('active');tmP.classList.remove('active');
+    $('tareo-vista-placa').style.display='none';$('tareo-vista-cliente').style.display='block';
+    renderTareoCliente();
+  });
+  var tcSel=$('tareo-cliente-sel');
+  if(tcSel) tcSel.addEventListener('change',pintarTareoClienteTabla);
 
   // Tabs historial
   var htT=$('htab-tareos'),htV=$('htab-vals');
