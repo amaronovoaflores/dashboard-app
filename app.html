@@ -552,10 +552,18 @@ function cargarConfig(){
 // editar_cuentas, editar_tarifas, agregar_mantos, cambiar_asignacion,
 // mes_completo, tareo_cliente, editar_tareo, editar_val, ver_placas) quedan
 // reservados: no hay ninguna edición client-side que gatear todavia.
+// Permisos que ocultan por defecto si el cliente no tiene "permisos" definido
+// en config.json (en vez de mostrar por retrocompatibilidad como el resto).
+// ver_economico: revela costos y margen de Amaro (cuota banco, mantos,
+// resultado del mes) — heredado del molde de BZR-712 (uso personal de
+// Amaro) pero nunca pensado para que lo vea un cliente. Oculto salvo que
+// se active a proposito para un cliente puntual.
+var PERM_OCULTO_POR_DEFECTO={ver_economico:true};
+
 function permOk(key){
   var p=CFG&&CFG.permisos;
-  if(!p||p[key]===undefined) return true; // sin dato = se muestra (retrocompatible)
-  return !!p[key];
+  if(p&&p[key]!==undefined) return !!p[key];
+  return !PERM_OCULTO_POR_DEFECTO[key]; // sin dato: oculto para la lista de arriba, visible para el resto
 }
 
 function aplicarPermisos(){
