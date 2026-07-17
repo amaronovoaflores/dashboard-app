@@ -529,12 +529,35 @@ function inicializarConConfig(){
     selC.appendChild(o);
   });
 
+  // Buscador de vehículos (solo aparece con flotas grandes — más de 8 placas)
+  var searchWrap=$('vehicle-search-wrap');
+  if(CFG.vehiculos.length>8){
+    if(!searchWrap){
+      searchWrap=document.createElement('div');
+      searchWrap.id='vehicle-search-wrap';
+      searchWrap.style.cssText='margin-bottom:10px;';
+      searchWrap.innerHTML='<input type="text" id="vehicle-search" placeholder="🔎 Buscar placa, cliente o proyecto…" '+
+        'style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:13px;">';
+      $('vehicle-bar').parentNode.insertBefore(searchWrap,$('vehicle-bar'));
+      $('vehicle-search').addEventListener('input',function(){
+        var q=this.value.toLowerCase().trim();
+        document.querySelectorAll('#vehicle-bar .v-btn').forEach(function(btn){
+          var texto=(btn.dataset.buscar||'');
+          btn.style.display=(!q||texto.indexOf(q)>=0)?'':'none';
+        });
+      });
+    }
+  } else if(searchWrap){
+    searchWrap.remove();
+  }
+
   // Botones de vehículos
   var bar=$('vehicle-bar'); bar.innerHTML='';
   CFG.vehiculos.forEach(function(v,i){
     var btn=document.createElement('button');
     btn.className='v-btn'+(i===0?' active':'');
     btn.innerHTML='🚛 <span class="v-placa">'+v.placa+'</span><span class="v-desc">'+v.descripcion+'</span>';
+    btn.dataset.buscar=(v.placa+' '+(v.descripcion||'')+' '+(v.asignado||'standby')+' '+(v.proyecto||'')+' '+(v.ubicacion||'')).toLowerCase();
     btn.onclick=function(){seleccionarVehiculo(i);};
     bar.appendChild(btn);
   });
@@ -1280,6 +1303,7 @@ function renderHistorial(){
 // ── STATUS ─────────────────────────────────────────────────────────────
 var STATUS_MODE='placa';
 var STATUS_PLACA_IDX=0;
+var STATUS_FILTROS={cliente:'',estado:'',proyecto:'',ubicacion:''};
 
 function renderStatus(){
   if(!CFG||!VEH) return;
@@ -1321,21 +1345,78 @@ function renderStatus(){
         '</div>'+
       '</div>';
   } else {
-    // Vista lista compacta — todas las placas
-    var html='<div style="display:flex;flex-direction:column;gap:8px;">';
-    CFG.vehiculos.forEach(function(v,i){
-      html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;">'+
-        '<div style="font-size:14px;font-weight:500;color:var(--text);min-width:72px;">'+v.placa+'</div>'+
-        '<div style="font-size:12px;color:var(--text2);flex:1;">'+v.descripcion+'</div>'+
-        '<div style="display:flex;gap:10px;align-items:center;">'+
-          '<div style="text-align:right;"><div style="font-size:14px;font-weight:500;">'+Math.round(Math.random()*200)+'</div><div style="font-size:10px;color:var(--text2);">Hoy</div></div>'+
-          '<div style="text-align:right;"><div style="font-size:14px;font-weight:500;">'+Math.round(1000+Math.random()*2000).toLocaleString()+'</div><div style="font-size:10px;color:var(--text2);">Mes</div></div>'+
-          '<div style="font-size:13px;font-weight:500;color:#FAC775;background:#0d1b2a;padding:4px 10px;border-radius:6px;white-space:nowrap;">'+Math.round(40000+Math.random()*10000).toLocaleString()+' km</div>'+
-        '</div>'+
-      '</div>';
+    // Vista tabla — todas las placas, con filtros (pensada para flotas grandes)
+    var clientesOpts=[], proyectosOpts=[], ubicacionesOpts=[];
+    CFG.vehiculos.forEach(function(v){
+      var cli=v.asignado||'Standby';
+      if(clientesOpts.indexOf(cli)<0) clientesOpts.push(cli);
+      if(v.proyecto&&proyectosOpts.indexOf(v.proyecto)<0) proyectosOpts.push(v.proyecto);
+      if(v.ubicacion&&ubicacionesOpts.indexOf(v.ubicacion)<0) ubicacionesOpts.push(v.ubicacion);
     });
-    html+='</div>';
-    content.innerHTML=html;
+    function opt(sel,val){return '<option value="'+val+'"'+(sel===val?' selected':'')+'>'+(val||'Todos')+'</option>';}
+    var filtrosHtml='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'+
+      '<select class="finput-status" id="sf-cliente" style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">'+
+        opt(STATUS_FILTROS.cliente,'')+clientesOpts.map(function(c){return opt(STATUS_FILTROS.cliente,c);}).join('')+
+      '</select>'+
+      '<select class="finput-status" id="sf-estado" style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">'+
+        '<option value=""'+(STATUS_FILTROS.estado===''?' selected':'')+'>Activo o Standby</option>'+
+        '<option value="activo"'+(STATUS_FILTROS.estado==='activo'?' selected':'')+'>Solo activos</option>'+
+        '<option value="standby"'+(STATUS_FILTROS.estado==='standby'?' selected':'')+'>Solo standby</option>'+
+      '</select>'+
+      (proyectosOpts.length?'<select class="finput-status" id="sf-proyecto" style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">'+
+        opt(STATUS_FILTROS.proyecto,'')+proyectosOpts.map(function(p){return opt(STATUS_FILTROS.proyecto,p);}).join('')+
+      '</select>':'')+
+      (ubicacionesOpts.length?'<select class="finput-status" id="sf-ubicacion" style="font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">'+
+        opt(STATUS_FILTROS.ubicacion,'')+ubicacionesOpts.map(function(u){return opt(STATUS_FILTROS.ubicacion,u);}).join('')+
+      '</select>':'')+
+    '</div>';
+
+    var filtrados=CFG.vehiculos.filter(function(v){
+      var cli=v.asignado||'Standby';
+      if(STATUS_FILTROS.cliente&&cli!==STATUS_FILTROS.cliente) return false;
+      if(STATUS_FILTROS.estado==='activo'&&!v.asignado) return false;
+      if(STATUS_FILTROS.estado==='standby'&&v.asignado) return false;
+      if(STATUS_FILTROS.proyecto&&v.proyecto!==STATUS_FILTROS.proyecto) return false;
+      if(STATUS_FILTROS.ubicacion&&v.ubicacion!==STATUS_FILTROS.ubicacion) return false;
+      return true;
+    });
+
+    var tablaHtml='<div class="sw" style="max-height:360px;"><table class="dt"><thead><tr>'+
+      '<th>Placa</th><th>Descripción</th><th>Cliente / Estado</th><th>Proyecto</th><th>Ubicación</th>'+
+    '</tr></thead><tbody>';
+    if(filtrados.length===0){
+      tablaHtml+='<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:20px;">Ningún vehículo coincide con los filtros</td></tr>';
+    }
+    filtrados.forEach(function(v){
+      var idxReal=CFG.vehiculos.indexOf(v);
+      var esStandby=!v.asignado;
+      tablaHtml+='<tr style="cursor:pointer;" data-idx="'+idxReal+'" class="status-row">'+
+        '<td style="font-weight:500;">'+v.placa+'</td>'+
+        '<td>'+(v.descripcion||'—')+'</td>'+
+        '<td>'+(esStandby?'<span style="color:var(--text2);">Standby</span>':v.asignado)+'</td>'+
+        '<td>'+(v.proyecto||'—')+'</td>'+
+        '<td>'+(v.ubicacion||'—')+'</td>'+
+      '</tr>';
+    });
+    tablaHtml+='</tbody></table></div>';
+
+    content.innerHTML=filtrosHtml+tablaHtml;
+
+    ['sf-cliente','sf-estado','sf-proyecto','sf-ubicacion'].forEach(function(id){
+      var el=$(id);
+      if(!el) return;
+      var campo=id.replace('sf-','');
+      el.onchange=function(){STATUS_FILTROS[campo]=this.value;renderStatus();};
+    });
+    content.querySelectorAll('.status-row').forEach(function(row){
+      row.onclick=function(){
+        STATUS_PLACA_IDX=parseInt(row.dataset.idx);
+        STATUS_MODE='placa';
+        var sp=$('stab-placa'),sc=$('stab-cliente');
+        if(sp)sp.classList.add('active'); if(sc)sc.classList.remove('active');
+        renderStatus();
+      };
+    });
   }
 
   // Chips de placas para status
