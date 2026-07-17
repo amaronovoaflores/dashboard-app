@@ -468,6 +468,7 @@ var MANTOS=[], LLANTAS=[], MANTO_TRAMOS=[], LLANTA_TRAMOS=[];
 var TOPE_LLANTA=60000, TRAMO_KM=5000;
 var EG_T=0, EG_KM=0;
 var marcados={}, ING={t:0,v:0,i:0};
+var SOAT_DATA=null;
 
 // ── UTILIDADES ─────────────────────────────────────────────────────────
 function $(id){return document.getElementById(id);}
@@ -597,6 +598,7 @@ function seleccionarVehiculo(idx){
   // Reset datos
   DRIVE_DATA={};DIAS={};DIAS2={};ODO=0;KMS_MES=0;LAST_DAY=0;marcados={};
   MANTOS=[];LLANTAS=[];MANTO_TRAMOS=[];LLANTA_TRAMOS=[];
+  SOAT_DATA=null;
   // Actualizar pill
   $('v-pill').innerHTML='🚛 '+VEH.descripcion+' · <strong>'+VEH.placa+'</strong>';
   set('t1-sub',VEH.descripcion+' · '+VEH.placa);
@@ -605,6 +607,62 @@ function seleccionarVehiculo(idx){
   // Cargar datos
   setStatus('loading','Cargando datos del vehículo '+VEH.placa+'…');
   cargarMantosJSON(function(){cargarHunterJSON();});
+  cargarSoatJSON();
+}
+
+// ── SOAT / REVISIÓN TÉCNICA ──────────────────────────────────────────────
+function cargarSoatJSON(){
+  var placaVeh=VEH.placa;
+  var urls=['datos_soat_'+placaVeh.replace('-','')+'.json?t='+Date.now(),
+    GH_RAW+'datos_soat_'+placaVeh.replace('-','')+'.json?t='+Date.now()];
+  function tryUrl(idx){
+    if(idx>=urls.length){
+      SOAT_DATA={sinDatos:true};
+      renderStatus();
+      return;
+    }
+    var xhr=new XMLHttpRequest();xhr.open('GET',urls[idx],true);xhr.timeout=8000;
+    xhr.onload=function(){
+      if(xhr.status===200){
+        try{
+          var d=JSON.parse(xhr.responseText);
+          if(d&&d.placa){SOAT_DATA=d;renderStatus();actualizarAlertasVencimiento();return;}
+        }catch(e){}
+      }
+      tryUrl(idx+1);
+    };
+    xhr.onerror=function(){tryUrl(idx+1);};xhr.ontimeout=function(){tryUrl(idx+1);};xhr.send();
+  }
+  tryUrl(0);
+}
+
+function diasHasta(fechaIso){
+  if(!fechaIso) return null;
+  var d=new Date(fechaIso+'T00:00:00');
+  if(isNaN(d.getTime())) return null;
+  return Math.round((d-new Date(new Date().toDateString()))/86400000);
+}
+
+function actualizarAlertasVencimiento(){
+  var alertasBar=$('alertas-bar');
+  if(!alertasBar||!SOAT_DATA) return;
+  // Limpia solo las alertas dinamicas (dejan las de config.json intactas)
+  alertasBar.querySelectorAll('.alerta-dinamica').forEach(function(el){el.remove();});
+  [['soat','SOAT'],['revision_tecnica','Revisión técnica']].forEach(function(par){
+    var d=SOAT_DATA[par[0]];
+    if(!d||!d.ok||!d.fecha_vencimiento) return;
+    var dias=diasHasta(d.fecha_vencimiento);
+    if(dias===null||dias>30) return;
+    var vencido=dias<0;
+    var chip=document.createElement('div');
+    chip.className='alerta-dinamica';
+    chip.style.cssText='display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:99px;font-size:13px;font-weight:500;'+
+      (vencido?'background:#FDEAEA;color:#A32D2D;border:1px solid #F0A0A0;':'background:#FAEEDA;color:#854F0B;border:1px solid #FAC775;');
+    chip.textContent=(vencido?'⚠ ':'⏳ ')+par[1]+' de '+SOAT_DATA.placa+' '+
+      (vencido?('venció hace '+Math.abs(dias)+' día(s)'):('vence en '+dias+' día(s)'));
+    alertasBar.appendChild(chip);
+    alertasBar.style.display='flex';
+  });
 }
 
 function updateHeader(){
@@ -1305,6 +1363,37 @@ var STATUS_MODE='placa';
 var STATUS_PLACA_IDX=0;
 var STATUS_FILTROS={cliente:'',estado:'',proyecto:'',ubicacion:''};
 
+function buildTarjetaSoat(){
+  if(!SOAT_DATA){
+    return '<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;padding:1rem;margin-top:.75rem;font-size:12px;color:var(--text2);">⏳ Consultando SOAT / revisión técnica…</div>';
+  }
+  if(SOAT_DATA.sinDatos){
+    return '<div style="background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;padding:1rem;margin-top:.75rem;font-size:12px;color:var(--text2);">Sin datos de SOAT / revisión técnica todavía para esta placa.</div>';
+  }
+  function tarjeta(titulo,d){
+    if(!d||!d.ok){
+      var msg=(d&&d.error)?d.error:'Sin datos disponibles';
+      return '<div style="flex:1;background:white;border-radius:8px;border:0.5px solid var(--border);padding:10px 12px;">'+
+        '<div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:4px;">'+titulo+'</div>'+
+        '<div style="font-size:12px;color:var(--text2);">'+msg+'</div></div>';
+    }
+    var dias=diasHasta(d.fecha_vencimiento);
+    var vencido=dias!==null&&dias<0;
+    var porVencer=dias!==null&&dias>=0&&dias<=30;
+    var color=vencido?'#A32D2D':(porVencer?'#854F0B':'#0F6E56');
+    var bg=vencido?'#FDEAEA':(porVencer?'#FAEEDA':'#E1F5EE');
+    var estado=vencido?'Vencido':(porVencer?'Por vencer':'Vigente');
+    return '<div style="flex:1;background:'+bg+';border-radius:8px;border:0.5px solid '+color+';padding:10px 12px;">'+
+      '<div style="font-size:10px;color:'+color+';text-transform:uppercase;margin-bottom:4px;font-weight:600;">'+titulo+' · '+estado+'</div>'+
+      '<div style="font-size:13px;color:var(--text);font-weight:500;">'+(d.aseguradora||d.planta||'—')+'</div>'+
+      '<div style="font-size:11px;color:var(--text2);margin-top:2px;">Vence: '+(d.fecha_vencimiento||'—')+
+        (dias!==null?' ('+(vencido?('hace '+Math.abs(dias)+'d'):(dias+'d'))+')':'')+'</div></div>';
+  }
+  return '<div style="display:flex;gap:10px;margin-top:.75rem;">'+
+    tarjeta('SOAT',SOAT_DATA.soat)+tarjeta('Revisión técnica',SOAT_DATA.revision_tecnica)+
+  '</div>';
+}
+
 function renderStatus(){
   if(!CFG||!VEH) return;
   var content=$('status-content');
@@ -1343,7 +1432,8 @@ function renderStatus(){
           '<div style="text-align:right;"><div style="font-size:12px;color:#9ab8b0;">Al día '+LAST_DAY+'</div>'+
           '<div style="font-size:12px;color:#5DCAA5;margin-top:2px;">vía '+ODO_SRC+'</div></div>'+
         '</div>'+
-      '</div>';
+      '</div>'+
+      buildTarjetaSoat();
   } else {
     // Vista tabla — todas las placas, con filtros (pensada para flotas grandes)
     var clientesOpts=[], proyectosOpts=[], ubicacionesOpts=[];
