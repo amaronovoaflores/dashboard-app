@@ -515,6 +515,13 @@ var GH_USER = 'amaronovoaflores';
 var GH_REPO = 'dashboard-' + (location.hostname.split('.')[0] || 'pedro');
 var GH_RAW = 'https://raw.githubusercontent.com/' + GH_USER + '/' + GH_REPO + '/main/';
 
+// Respaldo en la nube de Tareo/Valorización (Cloudflare Worker + D1). El
+// localStorage sigue siendo la fuente principal (rápida, funciona offline);
+// esto es solo para no perder el historial si el cliente cambia de celular,
+// borra caché o reinstala la PWA. No participa en facturación.
+var FLOTAS_WORKER = 'https://dash-flotas-datos.amaronovoaflores.workers.dev';
+var FLOTAS_SUB = (location.hostname.split('.')[0] || '').toLowerCase();
+
 // ── ESTADO ─────────────────────────────────────────────────────────────
 var DRIVE_DATA={}, DIAS={}, DIAS2={}, ODO=0, KMS_MES=0, LAST_DAY=0, DIAS_N=31;
 var EXCEL_ODO_FIN=0, EXCEL_LAST_DATE=null, ODO_SRC='GPS';
@@ -690,6 +697,10 @@ function inicializarConConfig(){
 
   // Alertas SOAT/revisión técnica de TODA la flota (no solo la placa activa)
   cargarSoatTodasPlacas();
+
+  // Restaurar historial de Tareo/Valorización desde el respaldo en la nube
+  // (por si este celular/navegador no tiene nada guardado localmente)
+  restaurarHistorialDesdeNube();
 
   // Inicializar páginas
   switchPage(permOk('tareo_placa')?'tareo':(permOk('ver_valorizacion')?'val':'status'));
@@ -1581,6 +1592,7 @@ function guardarTareo(){
   hist.unshift(registro);
   if(hist.length>50) hist=hist.slice(0,50);
   localStorage.setItem(HISTORIAL_KEY_T, JSON.stringify(hist));
+  respaldarEnNube('tareo',registro);
   alert('Tareo guardado correctamente.');
   renderHistorial();
 }
@@ -1606,8 +1618,51 @@ function guardarValorizacion(){
   hist.unshift(registro);
   if(hist.length>50) hist=hist.slice(0,50);
   localStorage.setItem(HISTORIAL_KEY_V, JSON.stringify(hist));
+  respaldarEnNube('valorizacion',registro);
   alert('Valorización guardada correctamente.');
   renderHistorial();
+}
+
+// Respaldo silencioso en la nube — nunca bloquea ni molesta al usuario si
+// falla (sin internet, worker caido, etc). El localStorage ya se guardo bien;
+// esto es solo continuidad ante perdida de celular/cache.
+function respaldarEnNube(tipo,registro){
+  if(!VEH||!FLOTAS_SUB) return;
+  try{
+    fetch(FLOTAS_WORKER+'/api/guardar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subdominio:FLOTAS_SUB,placa:VEH.placa,tipo:tipo,registro:registro})
+    }).catch(function(){});
+  }catch(e){}
+}
+
+function mergeHistorialNube(key,nuevos){
+  if(!nuevos||!nuevos.length) return;
+  var hist=JSON.parse(localStorage.getItem(key)||'[]');
+  var ids={};
+  hist.forEach(function(r){ids[r.id]=true;});
+  nuevos.forEach(function(r){
+    if(!ids[r.id]){hist.push(r);ids[r.id]=true;}
+  });
+  hist.sort(function(a,b){return b.id-a.id;});
+  if(hist.length>50) hist=hist.slice(0,50);
+  localStorage.setItem(key,JSON.stringify(hist));
+}
+
+// Trae el respaldo de la nube y completa lo que falte en localStorage —
+// asi un cliente que cambia de celular o reinstala la PWA recupera su
+// historial de tareos/valorizaciones guardados anteriormente.
+function restaurarHistorialDesdeNube(){
+  if(!FLOTAS_SUB) return;
+  fetch(FLOTAS_WORKER+'/api/historial?subdominio='+encodeURIComponent(FLOTAS_SUB))
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(d){
+      if(!d||!d.ok) return;
+      mergeHistorialNube(HISTORIAL_KEY_T,d.tareos);
+      mergeHistorialNube(HISTORIAL_KEY_V,d.valorizaciones);
+      renderHistorial();
+    }).catch(function(){});
 }
 
 function cargarTareoDesdeHist(id){
