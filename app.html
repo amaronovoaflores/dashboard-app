@@ -6,9 +6,22 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Flotas">
+<meta name="theme-color" content="#0d1b2a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
 <title>Dashboard Flotas</title>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBjOBgEngBzLZh1yiF1bkq4C-KtdiILHCI" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
 :root{
   --navy:#0d1b2a;--teal:#E1F5EE;--teal-mid:#0F6E56;--gold:#BA7517;
@@ -333,6 +346,7 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
       </div>
       <div class="action-bar">
         <button class="btn-p" id="btn-pdf-tareo">✓ Imprimir / PDF</button>
+        <button class="btn-s" id="btn-wa-tareo">📤 Enviar por WhatsApp</button>
         <button class="btn-s" id="btn-guardar-tareo"><i class="ti ti-device-floppy" aria-hidden="true"></i> Guardar tareo</button>
         <button class="btn-s" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
       </div>
@@ -368,6 +382,7 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
     </table>
     <div class="action-bar">
       <button class="btn-p" id="btn-pdf-val">✓ Imprimir / PDF</button>
+      <button class="btn-s" id="btn-wa-val">📤 Enviar por WhatsApp</button>
       <button class="btn-s" id="btn-guardar-val"><i class="ti ti-device-floppy" aria-hidden="true"></i> Guardar valorización</button>
       <button class="btn-s" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
     </div>
@@ -1453,6 +1468,92 @@ function abrirPDF(tipo){
   w.document.write(h);w.document.close();
 }
 
+// ── COMPARTIR POR WHATSAPP ────────────────────────────────────────────
+function datosCompartir(tipo){
+  var ti=parseInt($('sel-t').value)||0,ci=parseInt($('sel-c').value)||0;
+  var t=CFG.titulares[ti],c=CFG.clientes[ci];
+  var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
+  var m2sel=parseInt($('sel-m2').value),a2sel=parseInt($('sel-a2').value);
+  var periodo=MNOM[m1]+' '+a1+(m2sel>0?' + '+MNOM[m2sel]+' '+a2sel:'');
+  return {t:t,c:c,periodo:periodo};
+}
+
+function construirResumenTexto(tipo){
+  var d=datosCompartir(tipo);
+  var txt='*'+tipo+' · '+VEH.descripcion+' '+VEH.placa+'*\n'+d.periodo+'\n'+d.t.nombre+' → '+d.c.nombre+'\n\n';
+  if(tipo==='Tareo'){
+    txt+='Días trabajados: '+$('o-dias').textContent+'\n';
+    txt+='Días con kms extra: '+$('o-kmd').textContent+'\n';
+    txt+='Total kms extra: '+$('o-kme').textContent+'\n';
+    txt+='Total kms marcados: '+$('o-kmt').textContent;
+  } else {
+    txt+='Días de alquiler: '+$('v-d').textContent+'\n';
+    txt+='Kms adicional: '+$('v-k').textContent+'\n';
+    txt+='Monto total: '+$('v-tt').textContent+'\n';
+    txt+='Monto a abonar (neto): '+$('v-ne').textContent;
+  }
+  return txt;
+}
+
+function generarPDFBlob(tipo){
+  if(typeof jspdf==='undefined')return null;
+  var d=datosCompartir(tipo);
+  var doc=new jspdf.jsPDF();
+  doc.setFontSize(9);doc.setTextColor(100);
+  doc.text(d.t.nombre+' ('+d.t.ruc+')',14,15);
+  doc.text(d.c.nombre+' ('+d.c.ruc+')',14,21);
+  doc.setFontSize(14);doc.setTextColor(13,27,42);
+  doc.text(tipo+' · '+VEH.descripcion+' '+VEH.placa+' · '+d.periodo,14,32);
+  var head,body;
+  if(tipo==='Tareo'){
+    head=[['Días trabajados','Días con kms extra','Total kms extra','Total kms marcados']];
+    body=[[$('o-dias').textContent,$('o-kmd').textContent,$('o-kme').textContent,$('o-kmt').textContent]];
+  } else {
+    head=[['Descripción','Cant.','Tarifa','Importe']];
+    body=[
+      ['Días de alquiler',$('v-d').textContent,$('v-td').textContent,$('v-di').textContent],
+      ['Kms adicional',$('v-k').textContent,$('v-tk').textContent,$('v-ki').textContent],
+      ['Valor de venta','','',$('v-vt').textContent],
+      ['IGV (18%)','','',$('v-ig').textContent],
+      ['Monto total','','',$('v-tt').textContent],
+      ['Detracción (10%) — BN','','',$('v-de').textContent],
+      ['Monto a abonar (neto)','','',$('v-ne').textContent]
+    ];
+  }
+  doc.autoTable({startY:38,head:head,body:body,headStyles:{fillColor:[13,27,42]},styles:{fontSize:9}});
+  if(tipo==='Valorización' && CFG.cuentas && CFG.cuentas.bcp_numero){
+    var y=doc.lastAutoTable.finalY+10;
+    doc.setFontSize(10);doc.setTextColor(13,27,42);
+    doc.text('Cuentas para depósito:',14,y);
+    doc.setFontSize(9);doc.setTextColor(60);
+    var y2=y+7;
+    doc.text('BCP Cuenta Ahorros: '+CFG.cuentas.bcp_numero,14,y2);
+    if(CFG.cuentas.bcp_cci){y2+=6;doc.text('CCI: '+CFG.cuentas.bcp_cci,14,y2);}
+    if(CFG.cuentas.bn_detraccion){y2+=6;doc.text('Detracción BN: '+CFG.cuentas.bn_detraccion,14,y2);}
+  }
+  return doc.output('blob');
+}
+
+function compartirWhatsApp(tipo){
+  if(!CFG||!VEH)return;
+  var resumen=construirResumenTexto(tipo);
+  function fallbackTexto(){
+    window.open('https://wa.me/?text='+encodeURIComponent(resumen),'_blank');
+  }
+  try{
+    var blob=generarPDFBlob(tipo);
+    if(blob && navigator.canShare){
+      var nombreArch=tipo.replace('ó','o')+'_'+VEH.placa+'.pdf';
+      var file=new File([blob],nombreArch,{type:'application/pdf'});
+      if(navigator.canShare({files:[file]})){
+        navigator.share({files:[file],title:tipo+' '+VEH.placa,text:resumen}).catch(function(){});
+        return;
+      }
+    }
+  }catch(e){}
+  fallbackTexto();
+}
+
 // ── HISTORIAL ──────────────────────────────────────────────────────────
 var HISTORIAL_KEY_T = 'hist_tareos';
 var HISTORIAL_KEY_V = 'hist_vals';
@@ -1920,6 +2021,8 @@ document.addEventListener('DOMContentLoaded',function(){
   });
   $('btn-pdf-tareo').addEventListener('click',function(){abrirPDF('Tareo');});
   $('btn-pdf-val').addEventListener('click',function(){abrirPDF('Valorización');});
+  $('btn-wa-tareo').addEventListener('click',function(){compartirWhatsApp('Tareo');});
+  $('btn-wa-val').addEventListener('click',function(){compartirWhatsApp('Valorización');});
 
   // Botones guardar
   var btnGT=document.getElementById('btn-guardar-tareo');
