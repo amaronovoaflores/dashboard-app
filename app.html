@@ -10,6 +10,12 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
+<!-- Tipografía de modo simple ("Terreno Claro", handoff de diseño 21 Jul
+     2026) — Atkinson Hyperlegible (pensada para baja visión) + Space
+     Grotesk (títulos/números/botones). Solo se aplican dentro de
+     body.modo-simple, ver CSS. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <title>Dashboard Flotas</title>
 <script>
 if('serviceWorker' in navigator){
@@ -33,6 +39,103 @@ if('serviceWorker' in navigator){
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--font);background:var(--bg);color:var(--text);}
 .wrap{max-width:940px;margin:0 auto;padding:1.5rem 1rem 3rem;}
+
+/* ══ MODO SIMPLE — rediseño "Terreno Claro" (handoff de diseño 21 Jul 2026) ══
+   Todo lo de acá pisa las variables de arriba SOLO dentro de
+   body.modo-simple (clase que ya pone activarModoSimple()) — el modo
+   normal (flotas grandes) sigue exactamente igual que antes. */
+body.modo-simple{
+  --navy:#0B1622;--gold:#D79A34;--gold-pale:#FCEBC4;--gold-light:#FCEBC4;
+  --on-navy:#93AAB8;--muted:#93AAB8;
+  --bg:#FFF7EA;--bg2:#F3ECDC;--border:#EADFC8;--text:#1a1a1a;--text2:#8a7a68;
+  --r:14px;
+  font-family:'Atkinson Hyperlegible',var(--font);
+}
+body.modo-simple .app-empresa,body.modo-simple .v-placa,body.modo-simple .sec-t,
+body.modo-simple .mc-v,body.modo-simple .kv,body.modo-simple .btn-p,
+body.modo-simple .btn-s,body.modo-simple .tab-btn,body.modo-simple .mbtn,
+body.modo-simple select,body.modo-simple .pl-day-num,body.modo-simple .dias-progreso-txt,
+body.modo-simple .val-row .r,body.modo-simple .val-neto-v{
+  font-family:'Space Grotesk',var(--font);
+}
+/* Chips de placa: 3 estados no-negociables del handoff */
+body.modo-simple .v-btn{border-width:3px;border-radius:14px;padding:13px 18px;font-weight:700;font-size:16px;}
+body.modo-simple .v-btn.incluido{background:#0F6E56;border-color:#0F6E56;color:#fff;}
+body.modo-simple .v-btn.incluido.active{background:var(--navy);border-color:var(--gold);color:var(--gold-pale);}
+body.modo-simple .v-btn:not(.incluido){background:#fff;border-color:var(--border);color:var(--text2);}
+/* Tabs tipo "pastilla con sombra" — deben verse distintas de los chips
+   (era una confusión real del sistema viejo, ver Parte 5 del brief) */
+body.modo-simple .tabs{background:var(--bg2);border:none;border-radius:14px;padding:4px;}
+body.modo-simple .tab-btn{border-radius:11px;font-weight:700;color:#8a7a68;}
+body.modo-simple .tab-btn.active{background:#fff;color:var(--navy);box-shadow:0 2px 6px rgba(0,0,0,.08);border-color:transparent;}
+/* Menú Estado/Mapa/Historial/Checklist */
+body.modo-simple .menubar{gap:8px;}
+body.modo-simple .mbtn{border-radius:12px;font-weight:700;font-size:13px;padding:12px 4px;border:2px solid var(--border);background:#fff;color:#3a3a3a;}
+body.modo-simple .mbtn.active{background:var(--navy);color:var(--gold-pale);border-color:var(--navy);}
+body.modo-simple .mbtn .ti{display:none;}
+.mbtn-emoji{display:none;}
+body.modo-simple .mbtn-emoji{display:inline;}
+.mbtn-txt-simple{display:none;}
+body.modo-simple .mbtn-txt-simple{display:inline;}
+body.modo-simple .mbtn-txt-normal{display:none;}
+/* Selects de período */
+body.modo-simple select{border-width:2px;border-radius:12px;padding:12px 14px;font-weight:700;}
+/* Botones de acción */
+body.modo-simple .btn-p{border-radius:14px;padding:16px;font-size:16px;border:none;}
+body.modo-simple .btn-s{border-radius:14px;padding:13px 6px;font-size:12.5px;border-width:2px;}
+
+/* Calendario -> lista vertical de días (reemplaza la grilla en modo simple) */
+body.modo-simple .cal-legend{display:none;}
+body.modo-simple #dias-progreso-simple{display:flex;}
+body.modo-simple #cal-scroll-hint{display:block;}
+.cal-grid.modo-simple-lista{display:flex;flex-direction:column;gap:7px;max-height:320px;overflow-y:auto;padding-right:2px;}
+.dia-row{transition:opacity .15s;}
+.dia-row:active{opacity:.8!important;}
+/* Switch de "Marcar mes completo" */
+body.modo-simple #btn-mes-completo{display:flex;align-items:center;justify-content:space-between;width:100%;background:var(--bg2);border:none;padding:14px 16px;border-radius:14px;font-weight:700;color:var(--text);margin-bottom:1rem;text-align:left;}
+body.modo-simple #btn-mes-completo .ti,body.modo-simple .mes-completo-txt-normal{display:none;}
+body.modo-simple .mes-completo-simple-row{display:flex!important;align-items:center;justify-content:space-between;width:100%;font-family:'Space Grotesk',var(--font);}
+.switch-track{width:44px;height:26px;border-radius:14px;background:var(--border);position:relative;display:inline-block;flex-shrink:0;transition:background .2s;}
+.switch-track.on{background:#0F6E56;}
+.switch-thumb{position:absolute;left:2px;top:2px;width:22px;height:22px;border-radius:50%;background:#fff;transition:left .2s;}
+.switch-track.on .switch-thumb{left:16px;}
+
+/* Jerarquía de botones de acción — Tareo: Guardar es la acción primaria
+   (ancho completo); Valorización: Enviar por WhatsApp es la primaria.
+   Historial se saca del action-bar de Tareo (ya está arriba en el menú,
+   redundante); en Valorización se mantiene como secundaria. */
+body.modo-simple #tareo-vista-placa .action-bar,body.modo-simple #panel-val .action-bar{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;border-top:none;padding-top:0;
+}
+body.modo-simple #tareo-vista-placa .action-bar > button,
+body.modo-simple #panel-val .action-bar > button{width:auto;flex:none;}
+/* Tareo */
+body.modo-simple #btn-guardar-tareo{order:1;grid-column:1/-1;background:var(--navy);color:var(--gold-pale);border:none;padding:16px;font-size:16px;}
+body.modo-simple #btn-wa-tareo{order:2;border:2px solid #0F6E56;color:#0F6E56;background:#fff;}
+body.modo-simple #btn-pdf-tareo{order:3;background:#fff;color:#5a5648;border:2px solid var(--border);}
+body.modo-simple #btn-hist-tareo{display:none;}
+/* Valorización */
+body.modo-simple #panel-val .action-bar{grid-template-columns:1fr 1fr 1fr;}
+body.modo-simple #btn-wa-val{order:1;grid-column:1/-1;background:var(--navy);color:var(--gold-pale);border:none;padding:16px;font-size:16px;}
+body.modo-simple #btn-pdf-val{order:2;background:#fff;color:#5a5648;border:2px solid var(--border);}
+body.modo-simple #btn-guardar-val{order:3;background:#fff;color:#0F6E56;border:2px solid #0F6E56;}
+body.modo-simple #btn-hist-val{order:4;background:#fff;color:#5a5648;border:2px solid var(--border);}
+
+/* Tabla de Valorización — mismo DOM/ids que updateVal() ya llena, solo
+   cambia el sistema visual (colores, tipografía, radio, fila final neta
+   destacada en navy grande, kms extra en dorado, detracción en rojo). */
+body.modo-simple .vt{border:2px solid var(--border);border-radius:16px;overflow:hidden;border-spacing:0;margin-bottom:1rem;table-layout:auto;}
+body.modo-simple .vt th{font-family:'Space Grotesk',var(--font);font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);background:var(--bg2);padding:10px 12px;border-bottom:2px solid var(--border);}
+body.modo-simple .vt td{font-family:'Atkinson Hyperlegible',var(--font);font-weight:600;font-size:14px;color:#3a3a3a;border-bottom:1px solid var(--bg2);padding:13px 12px;}
+body.modo-simple .vt tr:last-child td{border-bottom:none;}
+body.modo-simple .vt td.r{font-family:'Space Grotesk',var(--font);font-weight:700;}
+body.modo-simple .vt tr.tot td{background:var(--navy);color:var(--gold-pale);}
+body.modo-simple .vt tr.mut:last-child td{background:var(--navy);color:var(--on-navy)!important;font-size:13px;text-transform:uppercase;letter-spacing:.04em;padding:16px 12px;}
+body.modo-simple .vt tr.mut:last-child td.r{color:var(--gold-pale)!important;font-size:20px;text-transform:none;letter-spacing:0;white-space:nowrap;}
+body.modo-simple #v-de{color:var(--red);}
+body.modo-simple #v-de:before{content:"− ";}
+body.modo-simple #v-ki{color:#8a5c0e;}
+
 
 /* STATUS */
 .status-bar{background:var(--navy);border-radius:var(--r);padding:10px 16px;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between;gap:10px;}
@@ -318,10 +421,10 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
 <div class="menubar" id="menubar" style="display:none;">
   <button id="menu-tareo" class="mbtn active" onclick="switchPage('tareo')"><i class="ti ti-clipboard-list" aria-hidden="true"></i> Tareo</button>
   <button id="menu-val" class="mbtn" onclick="switchPage('val')"><i class="ti ti-file-invoice" aria-hidden="true"></i> Valorización</button>
-  <button id="menu-status" class="mbtn" onclick="switchPage('status')"><i class="ti ti-activity" aria-hidden="true"></i> Status</button>
-  <button id="menu-mapa" class="mbtn" onclick="switchPage('mapa')"><i class="ti ti-map-pin" aria-hidden="true"></i> Mapa</button>
-  <button id="menu-hist" class="mbtn" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
-  <button id="menu-checklist" class="mbtn" onclick="abrirChecklist()"><i class="ti ti-clipboard-check" aria-hidden="true"></i> Checklist</button>
+  <button id="menu-status" class="mbtn" onclick="switchPage('status')"><i class="ti ti-activity" aria-hidden="true"></i><span class="mbtn-emoji">🚛</span> <span class="mbtn-txt-simple">Estado</span><span class="mbtn-txt-normal">Status</span></button>
+  <button id="menu-mapa" class="mbtn" onclick="switchPage('mapa')"><i class="ti ti-map-pin" aria-hidden="true"></i><span class="mbtn-emoji">📍</span> Mapa</button>
+  <button id="menu-hist" class="mbtn" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i><span class="mbtn-emoji">🕘</span> Historial</button>
+  <button id="menu-checklist" class="mbtn" onclick="abrirChecklist()"><i class="ti ti-clipboard-check" aria-hidden="true"></i><span class="mbtn-emoji">📋</span> Checklist</button>
 </div>
 
 <!-- CONFIG -->
@@ -385,8 +488,22 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
         <span><span class="ldot" style="background:#dbeafe;border:2px solid #2563eb"></span>Día trabajado (GPS 🛰)</span>
         <span><span class="ldot" style="background:#FAC775;border:1px solid #BA7517"></span>Kms extra (+límite)</span>
       </div>
-      <button class="btn-s" id="btn-mes-completo" style="margin-bottom:.75rem;"><i class="ti ti-calendar-event" aria-hidden="true"></i> ☑ Marcar mes completo</button>
+      <div id="dias-progreso-simple" style="display:none;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="flex:1;height:12px;border-radius:8px;background:var(--bg2);overflow:hidden;">
+          <div id="dias-progreso-fill" style="width:0%;height:100%;background:linear-gradient(90deg,#0F6E56,#1d8f70);"></div>
+        </div>
+        <span id="dias-progreso-txt" style="font-weight:700;color:#0F6E56;white-space:nowrap;">0/0 días</span>
+      </div>
+      <button class="btn-s" id="btn-mes-completo" style="margin-bottom:.75rem;">
+        <i class="ti ti-calendar-event" aria-hidden="true"></i>
+        <span class="mes-completo-txt-normal">☑ Marcar mes completo</span>
+        <span class="mes-completo-simple-row" style="display:none;">
+          <span>Marcar mes completo</span>
+          <span class="switch-track" id="mes-completo-switch"><span class="switch-thumb"></span></span>
+        </span>
+      </button>
       <div class="cal-grid" id="cal-grid"></div>
+      <div id="cal-scroll-hint" style="display:none;padding:10px 0 2px;font-size:11px;font-weight:600;color:#9a8a78;text-align:center;">↓ deslizá para ver el resto del mes</div>
       <div class="sum4">
         <div class="mc"><div class="mc-l">Días trabajados</div><div class="mc-v teal" id="o-dias">0</div></div>
         <div class="mc"><div class="mc-l">Días con kms extra</div><div class="mc-v gold" id="o-kmd">0</div></div>
@@ -397,7 +514,7 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
         <button class="btn-p" id="btn-pdf-tareo">✓ Imprimir / PDF</button>
         <button class="btn-s" id="btn-wa-tareo">📤 Enviar por WhatsApp</button>
         <button class="btn-s" id="btn-guardar-tareo"><i class="ti ti-device-floppy" aria-hidden="true"></i> Guardar tareo</button>
-        <button class="btn-s" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
+        <button class="btn-s" id="btn-hist-tareo" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
       </div>
     </div>
 
@@ -433,7 +550,7 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
       <button class="btn-p" id="btn-pdf-val">✓ Imprimir / PDF</button>
       <button class="btn-s" id="btn-wa-val">📤 Enviar por WhatsApp</button>
       <button class="btn-s" id="btn-guardar-val"><i class="ti ti-device-floppy" aria-hidden="true"></i> Guardar valorización</button>
-      <button class="btn-s" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
+      <button class="btn-s" id="btn-hist-val" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
     </div>
   </div>
 </div>
@@ -1421,7 +1538,68 @@ function pintarTareoClienteTabla(){
   });
 }
 
+// Calendario en lista vertical (modo simple, handoff "Terreno Claro" 21
+// Jul 2026) — mismos datos (marcados/DIAS/DIAS2) que el calendario grilla
+// de siempre, solo cambia cómo se muestran: una fila grande por día en
+// vez de una celda chica, con barra de progreso arriba.
+var DOW_NOMBRES=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+function buildCalendarLista(){
+  var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
+  var m2sel=parseInt($('sel-m2').value),a2sel=parseInt($('sel-a2').value);
+  var grid=$('cal-grid');grid.innerHTML='';grid.classList.add('modo-simple-lista');
+  var LIM=VEH?VEH.limite_km||200:200;
+
+  function addMesFilas(mesKey,mes,anio,total,diasData){
+    for(var d=1;d<=total;d++){
+      (function(day){
+        var key=mesKey+'_'+day;
+        var marcado=!!marcados[key];
+        var data=diasData[day]||{km:0,src:'excel'};
+        var km=data.km||0,extra=km>LIM?km-LIM:0,isHunter=data.src==='hunter';
+        var dow=DOW_NOMBRES[new Date(anio,mes-1,day).getDay()];
+        var row=document.createElement('div');
+        row.className='dia-row';
+        var borderColor='transparent',icono='',sub='Todavía no marcado',subColor='#9a8a78',opacidad='.55';
+        if(marcado){
+          opacidad='1';
+          if(extra>0){borderColor='#D79A34';icono='⚠️';sub='📍 '+km.toFixed(0)+' km · sobre el límite';subColor='#9a6a2a';}
+          else{borderColor='#0F6E56';icono='✅';sub='📍 '+km.toFixed(0)+' km recorridos'+(isHunter?'':'');subColor='#7a8a82';}
+        }
+        row.style.cssText='display:flex;align-items:center;gap:12px;background:#fff;border-radius:14px;padding:10px 14px;border-left:6px solid '+borderColor+';opacity:'+opacidad+';cursor:pointer;flex-shrink:0;';
+        row.innerHTML=
+          '<div style="width:22px;font-weight:700;font-size:18px;font-family:\'Space Grotesk\',var(--font);flex-shrink:0;">'+day+'</div>'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-weight:700;font-size:13.5px;">'+dow+'</div>'+
+            '<div style="font-weight:600;font-size:11.5px;color:'+subColor+';">'+sub+'</div>'+
+          '</div>'+
+          '<div style="font-size:18px;flex-shrink:0;">'+(icono||'<span style="display:inline-block;width:22px;height:22px;border-radius:7px;border:2px solid var(--border);"></span>')+'</div>';
+        row.onclick=function(){ toggleDay(key,mesKey,day); };
+        grid.appendChild(row);
+      })(d);
+    }
+  }
+
+  addMesFilas('m1',m1,a1,getDIM(m1,a1),DIAS);
+  if(m2sel>0) addMesFilas('m2',m2sel,a2sel,getDIM(m2sel,a2sel),DIAS2);
+
+  // Progreso (barra + "N/M días") y switch de "Marcar mes completo"
+  var totalDias=getDIM(m1,a1)+(m2sel>0?getDIM(m2sel,a2sel):0);
+  var marcadosN=0;
+  for(var k in marcados){ if(marcados[k]) marcadosN++; }
+  var pct=totalDias>0?Math.round(marcadosN/totalDias*100):0;
+  var pf=$('dias-progreso-fill'),pt=$('dias-progreso-txt');
+  if(pf) pf.style.width=pct+'%';
+  if(pt) pt.textContent=marcadosN+'/'+totalDias+' días';
+
+  var totalM1=getDIM(m1,a1),m1Completo=true;
+  for(var dd=1;dd<=totalM1;dd++){ if(!marcados['m1_'+dd]){ m1Completo=false; break; } }
+  var switchEl=$('mes-completo-switch');
+  if(switchEl) switchEl.classList.toggle('on',m1Completo);
+}
+
 function buildCalendar(){
+  if(MODO_SIMPLE){ buildCalendarLista(); return; }
   var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
   var m2sel=parseInt($('sel-m2').value),a2sel=parseInt($('sel-a2').value);
   var grid=$('cal-grid');grid.innerHTML='';
@@ -1461,7 +1639,8 @@ function buildCalendar(){
 }
 
 function toggleDay(key,mes,day){
-  marcados[key]=!marcados[key];paintCell(key,mes,day);
+  marcados[key]=!marcados[key];
+  if(MODO_SIMPLE) buildCalendarLista(); else paintCell(key,mes,day);
   updateVal();updateAct();buildChart();buildDaily();updateConcl();
 }
 function marcarMesCompleto(){
@@ -1472,8 +1651,9 @@ function marcarMesCompleto(){
   for(var d=1;d<=DIAS_N;d++){
     var key='m1_'+d;
     marcados[key]=!todosMarcados;
-    paintCell(key,'m1',d);
+    if(!MODO_SIMPLE) paintCell(key,'m1',d);
   }
+  if(MODO_SIMPLE) buildCalendarLista();
   updateVal();updateAct();buildChart();buildDaily();updateConcl();
 }
 function paintCell(key,mes,day){
@@ -1971,6 +2151,31 @@ function compartirWhatsApp(tipo){
 var HISTORIAL_KEY_T = 'hist_tareos';
 var HISTORIAL_KEY_V = 'hist_vals';
 
+// Banner de confirmación no bloqueante (reemplaza alert(), solo modo
+// simple — handoff "Terreno Claro" 21 Jul 2026). Se inserta en el flujo
+// normal justo antes del action-bar (empuja el layout, no tapa nada) y
+// se autooculta a los 3s.
+function mostrarBanner(contenedorId,mensaje,tipo){
+  tipo=tipo||'exito';
+  var cont=document.getElementById(contenedorId);
+  if(!cont) return;
+  var actionBar=cont.querySelector('.action-bar');
+  if(!actionBar) return;
+  var existente=cont.querySelector('.banner-confirmacion');
+  if(existente) existente.remove();
+  var bg=tipo==='exito'?'#0F6E56':'#A32D2D';
+  var sombra=tipo==='exito'?'rgba(15,110,86,.35)':'rgba(163,45,45,.35)';
+  var div=document.createElement('div');
+  div.className='banner-confirmacion';
+  div.style.cssText='background:'+bg+';color:#fff;border-radius:14px;padding:13px 16px;display:flex;align-items:center;gap:10px;font-weight:700;font-size:13.5px;box-shadow:0 10px 24px '+sombra+';margin-bottom:12px;transition:opacity .3s;';
+  div.innerHTML='<span style="width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(tipo==='exito'?'✓':'!')+'</span><span>'+mensaje+'</span>';
+  actionBar.parentNode.insertBefore(div,actionBar);
+  setTimeout(function(){
+    div.style.opacity='0';
+    setTimeout(function(){ if(div.parentNode) div.remove(); },300);
+  },3000);
+}
+
 function guardarTareo(){
   if(!VEH) return;
   var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
@@ -1995,7 +2200,8 @@ function guardarTareo(){
   if(hist.length>50) hist=hist.slice(0,50);
   localStorage.setItem(HISTORIAL_KEY_T, JSON.stringify(hist));
   respaldarEnNube('tareo',registro);
-  alert('Tareo guardado correctamente.');
+  if(MODO_SIMPLE) mostrarBanner('tareo-vista-placa','Tareo guardado correctamente.','exito');
+  else alert('Tareo guardado correctamente.');
   renderHistorial();
 }
 
@@ -2021,7 +2227,8 @@ function guardarValorizacion(){
   if(hist.length>50) hist=hist.slice(0,50);
   localStorage.setItem(HISTORIAL_KEY_V, JSON.stringify(hist));
   respaldarEnNube('valorizacion',registro);
-  alert('Valorización guardada correctamente.');
+  if(MODO_SIMPLE) mostrarBanner('panel-val','Valorización guardada correctamente.','exito');
+  else alert('Valorización guardada correctamente.');
   renderHistorial();
 }
 
@@ -2084,13 +2291,28 @@ function cargarTareoDesdeHist(id){
   },500);
 }
 
+// Estado vacío ilustrado de Historial (modo simple, handoff "Terreno
+// Claro" 21 Jul 2026) — reemplaza el texto plano de antes.
+function historialVacioHTML(tipo){
+  var titulo=tipo==='tareo'?'Todavía no guardaste ningún tareo':'Todavía no guardaste ninguna valorización';
+  var texto=tipo==='tareo'
+    ?'Cuando guardes el tareo de un mes, va a aparecer acá para que lo puedas volver a ver o reenviar.'
+    :'Cuando guardes una valorización, va a aparecer acá para que la puedas volver a ver o reenviar.';
+  return '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:52px 24px;">'+
+    '<div style="width:88px;height:88px;border-radius:50%;background:#fff;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:18px;">🚛</div>'+
+    '<div style="font-family:\'Space Grotesk\',var(--font);font-weight:700;font-size:17px;color:var(--text);margin-bottom:8px;">'+titulo+'</div>'+
+    '<div style="font-weight:600;font-size:14px;color:var(--text2);line-height:1.5;">'+texto+'</div>'+
+    '<button onclick="switchPage(\'tareo\')" style="margin-top:22px;padding:14px 22px;border:none;border-radius:14px;background:var(--navy);color:var(--gold-pale);font-family:\'Space Grotesk\',var(--font);font-weight:700;font-size:14.5px;cursor:pointer;">Ir a marcar días</button>'+
+    '</div>';
+}
+
 function renderHistorial(){
   // Tareos
   var histT=JSON.parse(localStorage.getItem(HISTORIAL_KEY_T)||'[]');
   var elT=$('hist-tareos-list');
   if(elT){
     if(histT.length===0){
-      elT.innerHTML='<div style="padding:1rem;color:var(--text2);font-size:14px;">No hay tareos guardados aún.</div>';
+      elT.innerHTML=MODO_SIMPLE?historialVacioHTML('tareo'):'<div style="padding:1rem;color:var(--text2);font-size:14px;">No hay tareos guardados aún.</div>';
     } else {
       elT.innerHTML='';
       histT.forEach(function(r){
@@ -2103,7 +2325,7 @@ function renderHistorial(){
           '<div style="display:flex;gap:6px;">'+
           '<button onclick="cargarTareoDesdeHist('+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border);cursor:pointer;">↻ Cargar</button>'+
           '<button onclick="compartirDesdeHistorial(\'tareo\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border);cursor:pointer;">📤 Enviar</button>'+
-          '<button onclick="borrarDeHistorial(\'tareo\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--red-light);color:var(--red);border:0.5px solid #F0A0A0;cursor:pointer;">🗑</button>'+
+          '<button onclick="borrarDeHistorial(this,\'tareo\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--red-light);color:var(--red);border:0.5px solid #F0A0A0;cursor:pointer;">🗑</button>'+
           '</div>';
         elT.appendChild(d);
       });
@@ -2114,7 +2336,7 @@ function renderHistorial(){
   var elV=$('hist-vals-list');
   if(elV){
     if(histV.length===0){
-      elV.innerHTML='<div style="padding:1rem;color:var(--text2);font-size:14px;">No hay valorizaciones guardadas aún.</div>';
+      elV.innerHTML=MODO_SIMPLE?historialVacioHTML('valorizacion'):'<div style="padding:1rem;color:var(--text2);font-size:14px;">No hay valorizaciones guardadas aún.</div>';
     } else {
       elV.innerHTML='';
       histV.forEach(function(r){
@@ -2126,7 +2348,7 @@ function renderHistorial(){
           '<div style="font-size:12px;color:var(--text2);">'+r.total+' · Neto '+r.neto+' · Guardado '+r.fecha_guardado+'</div></div></div>'+
           '<div style="display:flex;gap:6px;">'+
           '<button onclick="compartirDesdeHistorial(\'valorizacion\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border);cursor:pointer;">📤 Enviar</button>'+
-          '<button onclick="borrarDeHistorial(\'valorizacion\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--red-light);color:var(--red);border:0.5px solid #F0A0A0;cursor:pointer;">🗑</button>'+
+          '<button onclick="borrarDeHistorial(this,\'valorizacion\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--red-light);color:var(--red);border:0.5px solid #F0A0A0;cursor:pointer;">🗑</button>'+
           '</div>';
         elV.appendChild(d);
       });
@@ -2154,13 +2376,39 @@ function compartirDesdeHistorial(tipo,id){
   window.open('https://wa.me/?text='+encodeURIComponent(texto),'_blank');
 }
 
-function borrarDeHistorial(tipo,id){
+function borrarDeHistorial(btnOrTipo,tipoOrId,idMaybe){
+  // Compat: modo normal sigue llamando borrarDeHistorial('tareo', id) sin
+  // elemento (usa confirm() nativo). Modo simple pasa el botón como primer
+  // argumento para el patrón de doble-toque (handoff "Terreno Claro").
+  var btn,tipo,id;
+  if(typeof btnOrTipo==='string'){ tipo=btnOrTipo; id=tipoOrId; btn=null; }
+  else { btn=btnOrTipo; tipo=tipoOrId; id=idMaybe; }
+
+  function borrarYa(){
+    var key=tipo==='tareo'?HISTORIAL_KEY_T:HISTORIAL_KEY_V;
+    var hist=JSON.parse(localStorage.getItem(key)||'[]');
+    hist=hist.filter(function(x){return x.id!==id;});
+    localStorage.setItem(key,JSON.stringify(hist));
+    renderHistorial();
+  }
+
+  if(MODO_SIMPLE && btn){
+    if(btn.dataset.confirmando==='1'){ borrarYa(); return; }
+    btn.dataset.confirmando='1';
+    var textoOriginal=btn.textContent;
+    btn.textContent='¿Seguro? Tocá de nuevo';
+    btn.style.background='#A32D2D';btn.style.color='#fff';btn.style.borderColor='#A32D2D';
+    setTimeout(function(){
+      if(btn.dataset.confirmando==='1'){
+        btn.dataset.confirmando='';
+        btn.textContent=textoOriginal;
+        btn.style.background='';btn.style.color='';btn.style.borderColor='';
+      }
+    },3000);
+    return;
+  }
   if(!confirm('¿Borrar este registro del historial? No se puede deshacer.')) return;
-  var key=tipo==='tareo'?HISTORIAL_KEY_T:HISTORIAL_KEY_V;
-  var hist=JSON.parse(localStorage.getItem(key)||'[]');
-  hist=hist.filter(function(x){return x.id!==id;});
-  localStorage.setItem(key,JSON.stringify(hist));
-  renderHistorial();
+  borrarYa();
 }
 
 // ── STATUS ─────────────────────────────────────────────────────────────
