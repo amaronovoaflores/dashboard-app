@@ -979,6 +979,135 @@ function activarModoSimple(){
 
   renderSimpleClienteSel();
   renderSimpleChips();
+
+  // Onboarding guiado (handoff "Terreno Claro" 21 Jul 2026): botón de
+  // ayuda siempre disponible + tour automático la primera vez.
+  agregarBotonAyudaOnboarding();
+  if(!localStorage.getItem('onboarding_v1_visto')){
+    setTimeout(iniciarOnboarding,900);
+  }
+}
+
+// ── ONBOARDING GUIADO (modo simple) ─────────────────────────────────────
+// Tour de 8 pasos (el guion del handoff describe 7, el primero se separó
+// en 2 acá porque apunta a dos elementos distintos con textos distintos:
+// primero el tab "Cliente", luego el chip de placa) que corre ENCIMA del
+// DOM real de la app (no una maqueta aparte) — usa getBoundingClientRect()
+// de los elementos reales para que funcione en cualquier tamaño de
+// pantalla. No bloquea la interacción real: el overlay de oscurecido y el
+// cursor tienen pointer-events:none, solo el globo de texto es clickeable.
+var ONBOARD_PASOS=[
+  {sel:'#simple-tab-cliente',txt:'Si trabajás siempre para el mismo contratista, podés elegir por Cliente en vez de por Placa.',dur:6500},
+  {sel:'#simple-chips .v-btn',txt:'Ahora elegí Placas: tocá una para sumarla a la sesión de hoy — podés elegir más de una.',dur:6500},
+  {sel:'.period-bar select',txt:'Elegí el mes y el año que querés cobrar.',dur:3500},
+  {sel:'.dia-row',txt:'Tocá cada fila para marcar el día trabajado — así de simple.',dur:5500},
+  {sel:'#btn-mes-completo',txt:'Si ya sabés que trabajaste todo el mes, tocá acá: se marca todo de una sola vez.',dur:4000},
+  {sel:'#btn-guardar-tareo',txt:'Cuando termines de marcar, tocá Guardar.',dur:4500},
+  {sel:'.vt',txt:'Estos montos se arman solos a partir de tus días marcados: no hay que escribir nada a mano.',dur:4500,tab:'val',sinCursor:true},
+  {sel:'#btn-wa-val',txt:'Así le mandás el cobro a tu cliente, directo por WhatsApp.',dur:5000,tab:'val'}
+];
+var ONBOARD_IDX=0;
+var ONBOARD_TIMER=null;
+
+function agregarBotonAyudaOnboarding(){
+  if($('onboard-ayuda-btn')) return;
+  var b=document.createElement('button');
+  b.id='onboard-ayuda-btn';
+  b.textContent='?';
+  b.title='¿Cómo se usa esto?';
+  b.style.cssText='position:fixed;bottom:18px;right:18px;width:48px;height:48px;border-radius:50%;background:var(--navy);color:var(--gold-pale);border:2px solid var(--gold);font-family:\'Space Grotesk\',var(--font);font-weight:700;font-size:20px;cursor:pointer;z-index:900;box-shadow:0 6px 16px rgba(0,0,0,.25);';
+  b.onclick=function(){ iniciarOnboarding(); };
+  document.body.appendChild(b);
+}
+
+function iniciarOnboarding(){
+  if(!MODO_SIMPLE) return;
+  construirOnboardingDOM();
+  mostrarPasoOnboarding(0);
+}
+
+function construirOnboardingDOM(){
+  var existente=$('onboard-overlay');
+  if(existente) existente.remove();
+  var ov=document.createElement('div');
+  ov.id='onboard-overlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;pointer-events:none;';
+  ov.innerHTML=
+    '<div id="onboard-spot" style="position:absolute;border-radius:14px;transition:all .4s ease;box-shadow:0 0 0 9999px rgba(11,22,34,.55);"></div>'+
+    '<div id="onboard-cursor" style="position:absolute;font-size:30px;transition:left .5s ease,top .5s ease;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));">👆</div>'+
+    '<div id="onboard-tooltip" style="position:absolute;max-width:280px;background:#0B1622;border:3px solid #D79A34;border-radius:20px;padding:16px 18px;pointer-events:auto;transition:left .4s ease,top .4s ease;font-family:\'Atkinson Hyperlegible\',var(--font);box-shadow:0 12px 28px rgba(0,0,0,.35);">'+
+      '<div id="onboard-dots" style="display:flex;gap:5px;margin-bottom:10px;"></div>'+
+      '<div id="onboard-texto" style="color:#FCEBC4;font-weight:700;font-size:14px;line-height:1.4;margin-bottom:12px;"></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">'+
+        '<button id="onboard-saltar" style="background:none;border:none;color:#93AAB8;font-weight:700;font-size:12.5px;cursor:pointer;padding:6px 4px;font-family:inherit;">Saltar tour</button>'+
+        '<button id="onboard-siguiente" style="background:#D79A34;border:none;color:#0B1622;font-weight:700;font-size:12.5px;border-radius:10px;padding:9px 16px;cursor:pointer;font-family:\'Space Grotesk\',var(--font);">Siguiente ▸</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(ov);
+  $('onboard-saltar').onclick=terminarOnboarding;
+  $('onboard-siguiente').onclick=function(){ avanzarOnboarding(); };
+}
+
+function mostrarPasoOnboarding(idx){
+  if(idx>=ONBOARD_PASOS.length){ terminarOnboarding(); return; }
+  ONBOARD_IDX=idx;
+  var paso=ONBOARD_PASOS[idx];
+
+  // Cambiar de pestaña Tareo/Valorización si el paso lo necesita
+  var quiereVal=paso.tab==='val';
+  if(quiereVal && !$('tab-val').classList.contains('active')) $('tab-val').click();
+  else if(!quiereVal && !$('tab-tareo').classList.contains('active')) $('tab-tareo').click();
+
+  var dots=$('onboard-dots');dots.innerHTML='';
+  ONBOARD_PASOS.forEach(function(_,i){
+    var d=document.createElement('div');
+    d.style.cssText='height:6px;border-radius:3px;background:'+(i===idx?'#D79A34':'rgba(255,255,255,.25)')+';width:'+(i===idx?'18px':'6px')+';transition:all .3s;';
+    dots.appendChild(d);
+  });
+  $('onboard-texto').textContent=paso.txt;
+  $('onboard-siguiente').textContent=idx===ONBOARD_PASOS.length-1?'Listo':'Siguiente ▸';
+  $('onboard-cursor').style.display=paso.sinCursor?'none':'block';
+
+  setTimeout(function(){ posicionarOnboarding(paso); },350);
+
+  clearTimeout(ONBOARD_TIMER);
+  ONBOARD_TIMER=setTimeout(function(){ avanzarOnboarding(); },paso.dur);
+}
+
+function posicionarOnboarding(paso){
+  var ov=$('onboard-overlay');
+  if(!ov) return;
+  var el=document.querySelector(paso.sel);
+  if(!el){ avanzarOnboarding();return; }
+  el.scrollIntoView({behavior:'smooth',block:'center'});
+  setTimeout(function(){
+    var r=el.getBoundingClientRect();
+    var spot=$('onboard-spot');
+    spot.style.left=(r.left-6)+'px';spot.style.top=(r.top-6)+'px';
+    spot.style.width=(r.width+12)+'px';spot.style.height=(r.height+12)+'px';
+
+    var cursor=$('onboard-cursor');
+    cursor.style.left=(r.left+r.width/2-15)+'px';
+    cursor.style.top=(r.top+r.height/2-15)+'px';
+
+    var tip=$('onboard-tooltip');
+    var arriba=r.top>window.innerHeight/2;
+    var tipLeft=Math.max(12,Math.min(window.innerWidth-292,r.left));
+    var tipTop=arriba?Math.max(12,r.top-175):Math.min(window.innerHeight-190,r.bottom+16);
+    tip.style.left=tipLeft+'px';tip.style.top=tipTop+'px';
+  },400);
+}
+
+function avanzarOnboarding(){
+  clearTimeout(ONBOARD_TIMER);
+  mostrarPasoOnboarding(ONBOARD_IDX+1);
+}
+
+function terminarOnboarding(){
+  clearTimeout(ONBOARD_TIMER);
+  var ov=$('onboard-overlay');
+  if(ov) ov.remove();
+  localStorage.setItem('onboarding_v1_visto','1');
 }
 
 // Meses abreviados (Ene, Feb...) en modo simple para que los 4 selects
