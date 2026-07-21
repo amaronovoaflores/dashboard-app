@@ -321,6 +321,7 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
   <button id="menu-status" class="mbtn" onclick="switchPage('status')"><i class="ti ti-activity" aria-hidden="true"></i> Status</button>
   <button id="menu-mapa" class="mbtn" onclick="switchPage('mapa')"><i class="ti ti-map-pin" aria-hidden="true"></i> Mapa</button>
   <button id="menu-hist" class="mbtn" onclick="switchPage('historial')"><i class="ti ti-history" aria-hidden="true"></i> Historial</button>
+  <button id="menu-checklist" class="mbtn" onclick="abrirChecklist()"><i class="ti ti-clipboard-check" aria-hidden="true"></i> Checklist</button>
 </div>
 
 <!-- CONFIG -->
@@ -2461,6 +2462,15 @@ function renderStatus(){
     chipsEl.innerHTML='';
   }
   set('status-sub',STATUS_MODE==='placa'?'Vista detalle':'Vista relación · todas las placas');
+}
+
+// Checklist / estándar de la camioneta: PDF fijo (mismo para todas las
+// placas y clientes), vive en el repo de cada cliente (mismo patrón que
+// manifest.json/icon-*.png) para que GitHub Pages lo sirva con
+// Content-Type: application/pdf correcto (raw.githubusercontent.com lo
+// serviría como descarga forzada, sin abrir en el navegador).
+function abrirChecklist(){
+  window.open('checklist.pdf','_blank');
 }
 
 // ── NAVEGACIÓN PÁGINAS ─────────────────────────────────────────────────
