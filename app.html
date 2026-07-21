@@ -453,7 +453,7 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
   <p class="mt">Kms por día <span style="font-weight:400;font-size:10px;opacity:.7">← desliza →</span></p>
   <div class="chart-out">
     <div class="chart-bars" id="chart-bars"></div>
-    <div style="display:flex;gap:12px;font-size:11px;color:var(--text2);margin-top:7px;flex-wrap:wrap">
+    <div id="chart-legend" style="display:flex;gap:12px;font-size:11px;color:var(--text2);margin-top:7px;flex-wrap:wrap">
       <span><span class="ldot" style="background:var(--teal);border:2px solid var(--teal-mid)"></span>Cliente (Excel)</span>
       <span><span class="ldot" style="background:var(--blue-light);border:2px solid var(--blue)"></span>Cliente (GPS 🛰)</span>
       <span><span class="ldot" style="background:var(--gold-light);border:1px solid var(--gold-pale)"></span>+kms</span>
@@ -839,6 +839,11 @@ function activarModoSimple(){
   // Leyenda del calendario: no se trabaja con Excel con los clientes.
   var legExcel=document.querySelector('.cal-legend span:first-child');
   if(legExcel) legExcel.style.display='none';
+
+  // Misma limpieza en la leyenda del gráfico "Kms por día" (justo antes
+  // del widget de Último odómetro) — queda GPS y +kms, se saca Excel.
+  var legExcel2=document.querySelector('#chart-legend span:first-child');
+  if(legExcel2) legExcel2.style.display='none';
 
   // Toggle Placas / Cliente
   $('simple-tab-placas').onclick=function(){
@@ -1459,9 +1464,13 @@ function toggleDay(key,mes,day){
   updateVal();updateAct();buildChart();buildDaily();updateConcl();
 }
 function marcarMesCompleto(){
+  // Toggle: si ya estaba todo marcado, lo desmarca todo — antes solo
+  // marcaba y no había forma de deshacerlo desde este botón.
+  var todosMarcados=true;
+  for(var d=1;d<=DIAS_N;d++){ if(!marcados['m1_'+d]){ todosMarcados=false; break; } }
   for(var d=1;d<=DIAS_N;d++){
     var key='m1_'+d;
-    marcados[key]=true;
+    marcados[key]=!todosMarcados;
     paintCell(key,'m1',d);
   }
   updateVal();updateAct();buildChart();buildDaily();updateConcl();
