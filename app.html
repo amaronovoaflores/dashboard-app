@@ -61,6 +61,16 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);}
 .v-placa{font-weight:700;font-size:14px;}
 .v-desc{font-size:10px;opacity:.7;}
 
+/* SELECTOR SIMPLE (modo_simple) */
+.simple-placas-list{max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);padding:4px 14px;margin-bottom:1rem;background:white;}
+.simple-placas-list label{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--border);cursor:pointer;font-size:14px;}
+.simple-placas-list label:last-child{border-bottom:none;}
+.simple-placas-list input[type=checkbox]{width:18px;height:18px;flex-shrink:0;}
+.simple-placa-desc{color:var(--text2);font-size:12px;}
+.simple-cliente-wrap{margin-bottom:1rem;}
+.simple-cliente-wrap select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r);font-size:14px;}
+.simple-placeholder{padding:1.5rem 1rem;color:var(--text2);font-size:14px;text-align:center;background:var(--bg2);border-radius:var(--r);margin-bottom:1rem;}
+
 /* CONFIG */
 .config-bar{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:1rem;padding:12px 14px;background:white;border-radius:var(--r);border:1px solid var(--border);}
 .cf{display:flex;flex-direction:column;gap:4px;}
@@ -263,7 +273,25 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
 <!-- ALERTAS SOAT -->
 <div id="alertas-bar" style="display:none;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;"></div>
 
-<!-- VEHICLE SELECTOR -->
+<!-- SELECTOR SIMPLE (modo_simple:true en config.json) — reemplaza el
+     vehicle-bar de siempre + el config-bar (titular/cliente). El titular
+     no se elige (ya se sabe cuál es); acá primero se define QUÉ placas se
+     van a tarear (por placa suelta o por cliente), recién ahí aparecen los
+     chips + el mes, y más abajo Tareo/Valorización. -->
+<div id="simple-selector" style="display:none;">
+  <div class="tabs">
+    <button class="tab-btn active" id="simple-tab-placas">Placas</button>
+    <button class="tab-btn" id="simple-tab-cliente">Cliente</button>
+  </div>
+  <div id="simple-placas-wrap" class="simple-placas-list"></div>
+  <div id="simple-cliente-wrap" class="simple-cliente-wrap" style="display:none;">
+    <select id="simple-cliente-sel"></select>
+  </div>
+  <div class="vehicle-bar" id="simple-chips"></div>
+  <div id="simple-placeholder" class="simple-placeholder">Selecciona una o más placas para continuar.</div>
+</div>
+
+<!-- VEHICLE SELECTOR (modo normal) -->
 <div class="vehicle-bar" id="vehicle-bar"></div>
 
 <!-- MENÚ PRINCIPAL -->
@@ -508,6 +536,18 @@ var VEH = null; // vehículo activo
 var VEH_IDX = 0;
 var hoy = new Date();
 
+// Modo simple (config.json -> modo_simple:true): pensado para clientes
+// chicos sin experiencia. Reordena la pantalla inicial — primero elegir
+// PLACAS (checkboxes) o CLIENTE (auto-selecciona sus placas), recién ahí
+// aparecen los chips + el mes + Tareo/Valorización. Es el mismo app.html
+// de siempre (un solo motor, ver arquitectura compartida) — esto solo
+// cambia qué se muestra y en qué orden, no la lógica de tareo/valorización
+// de abajo, que sigue igual para todos los modos.
+var MODO_SIMPLE = false;
+var SIMPLE_MODO = 'placas'; // 'placas' | 'cliente'
+var SIMPLE_PLACAS_CHECK = {}; // idx real de CFG.vehiculos -> bool
+var SIMPLE_CLIENTE_IDX = 0;
+
 // Repo de respaldo (raw.githubusercontent.com) derivado del subdominio actual.
 // subdominio.dash.net.pe -> dashboard-subdominio (convención de la plataforma).
 // Al copiar este archivo a un cliente nuevo no hay que tocar nada acá.
@@ -620,6 +660,8 @@ function aplicarPermisos(){
 }
 
 function inicializarConConfig(){
+  MODO_SIMPLE = !!CFG.modo_simple;
+
   // Título y meta
   document.title='Dashboard '+CFG.empresa.nombre;
   $('app-header').style.borderLeftColor = CFG.empresa.color_acento||'#BA7517';
@@ -671,6 +713,7 @@ function inicializarConConfig(){
   CFG.vehiculos.forEach(function(v,i){
     var btn=document.createElement('button');
     btn.className='v-btn'+(i===0?' active':'');
+    btn.dataset.idx=i;
     btn.innerHTML='🚛 <span class="v-placa">'+v.placa+'</span><span class="v-desc">'+v.descripcion+'</span>';
     btn.dataset.buscar=(v.placa+' '+(v.descripcion||'')+' '+(v.asignado||'standby')+' '+(v.proyecto||'')+' '+(v.ubicacion||'')).toLowerCase();
     btn.onclick=function(){seleccionarVehiculo(i);};
@@ -712,13 +755,126 @@ function inicializarConConfig(){
   $('sel-m2').onchange=onPeriodChange;$('sel-a2').onchange=onPeriodChange;
   $('sel-t').onchange=updateHeader;$('sel-c').onchange=updateHeader;
 
+  if(MODO_SIMPLE){
+    SIMPLE_PLACAS_CHECK={0:true}; // primera placa preseleccionada, como el modo normal
+    activarModoSimple();
+  }
+
   seleccionarVehiculo(0);
+}
+
+// ── MODO SIMPLE (minoristas sin experiencia) ─────────────────────────────
+function activarModoSimple(){
+  // Header: sin "cliente" (recién se define abajo si es por cliente)
+  var hc=$('h-cliente'), hcr=$('h-cliente-r');
+  if(hc) hc.style.display='none';
+  if(hcr) hcr.style.display='none';
+
+  // Se ocultan el vehicle-bar y config-bar normales — los reemplaza
+  // #simple-selector. El titular no se elige (ya se sabe cuál es): sel-t
+  // sigue existiendo oculto con su valor por defecto para no romper el
+  // resto del código (PDFs, WhatsApp, etc. lo siguen leyendo igual).
+  var vb=$('vehicle-bar'); if(vb) vb.style.display='none';
+  var cb=document.querySelector('.config-bar'); if(cb) cb.style.display='none';
+  var searchWrap=$('vehicle-search-wrap'); if(searchWrap) searchWrap.style.display='none';
+
+  $('simple-selector').style.display='block';
+
+  // Reubicar la línea de mes (period-bar) justo debajo de los chips —
+  // es el mismo <select> de siempre, no se duplica nada.
+  var periodBar=document.querySelector('.period-bar');
+  if(periodBar) $('simple-selector').appendChild(periodBar);
+
+  // Toggle Placas / Cliente
+  $('simple-tab-placas').onclick=function(){
+    SIMPLE_MODO='placas';
+    $('simple-tab-placas').classList.add('active');$('simple-tab-cliente').classList.remove('active');
+    $('simple-placas-wrap').style.display='block';$('simple-cliente-wrap').style.display='none';
+    renderSimpleChips();
+  };
+  $('simple-tab-cliente').onclick=function(){
+    SIMPLE_MODO='cliente';
+    $('simple-tab-cliente').classList.add('active');$('simple-tab-placas').classList.remove('active');
+    $('simple-placas-wrap').style.display='none';$('simple-cliente-wrap').style.display='block';
+    renderSimpleChips();
+  };
+
+  renderSimplePlacasCheck();
+  renderSimpleClienteSel();
+  renderSimpleChips();
+}
+
+function renderSimplePlacasCheck(){
+  var cont=$('simple-placas-wrap'); cont.innerHTML='';
+  CFG.vehiculos.forEach(function(v,i){
+    var row=document.createElement('label');
+    row.innerHTML='<input type="checkbox" data-idx="'+i+'" '+(SIMPLE_PLACAS_CHECK[i]?'checked':'')+'>'+
+      '<span>'+v.placa+' <span class="simple-placa-desc">'+(v.descripcion||'')+'</span></span>';
+    cont.appendChild(row);
+  });
+  cont.addEventListener('change',function(e){
+    if(e.target.type!=='checkbox') return;
+    var i=parseInt(e.target.dataset.idx);
+    SIMPLE_PLACAS_CHECK[i]=e.target.checked;
+    renderSimpleChips();
+  });
+}
+
+function renderSimpleClienteSel(){
+  var sel=$('simple-cliente-sel'); sel.innerHTML='';
+  CFG.clientes.forEach(function(c,i){
+    var o=document.createElement('option');o.value=i;o.textContent=c.nombre;
+    sel.appendChild(o);
+  });
+  sel.onchange=function(){
+    SIMPLE_CLIENTE_IDX=parseInt(sel.value)||0;
+    $('sel-c').value=String(SIMPLE_CLIENTE_IDX); // mantener sincronizado para PDFs/valorización
+    renderSimpleChips();
+  };
+}
+
+function placasSeleccionadasSimple(){
+  if(SIMPLE_MODO==='cliente'){
+    var cli=CFG.clientes[SIMPLE_CLIENTE_IDX];
+    if(!cli) return [];
+    var idxs=[];
+    CFG.vehiculos.forEach(function(v,i){ if(v.asignado===cli.nombre) idxs.push(i); });
+    return idxs;
+  }
+  var idxs=[];
+  CFG.vehiculos.forEach(function(v,i){ if(SIMPLE_PLACAS_CHECK[i]) idxs.push(i); });
+  return idxs;
+}
+
+function renderSimpleChips(){
+  var cont=$('simple-chips'); cont.innerHTML='';
+  var idxs=placasSeleccionadasSimple();
+  idxs.forEach(function(i){
+    var v=CFG.vehiculos[i];
+    var btn=document.createElement('button');
+    btn.className='v-btn'+(i===VEH_IDX?' active':'');
+    btn.dataset.idx=i;
+    btn.innerHTML='🚛 <span class="v-placa">'+v.placa+'</span><span class="v-desc">'+v.descripcion+'</span>';
+    btn.onclick=function(){seleccionarVehiculo(i);};
+    cont.appendChild(btn);
+  });
+
+  var hayPlacas=idxs.length>0;
+  var periodBar=document.querySelector('.period-bar');
+  if(periodBar) periodBar.style.display=hayPlacas?'flex':'none';
+  var menu=$('menubar'); if(menu) menu.style.display=hayPlacas?'flex':'none';
+  $('simple-placeholder').style.display=hayPlacas?'none':'block';
+
+  if(hayPlacas && idxs.indexOf(VEH_IDX)===-1){
+    seleccionarVehiculo(idxs[0]);
+  }
 }
 
 function seleccionarVehiculo(idx){
   VEH_IDX=idx; VEH=CFG.vehiculos[idx];
-  // Actualizar botones
-  document.querySelectorAll('.v-btn').forEach(function(b,i){b.classList.toggle('active',i===idx);});
+  // Actualizar botones (por dataset.idx, no por posición — en modo_simple
+  // los chips son un subconjunto filtrado, no todos los vehículos en orden)
+  document.querySelectorAll('.v-btn').forEach(function(b){b.classList.toggle('active',parseInt(b.dataset.idx)===idx);});
   // Reset datos
   DRIVE_DATA={};DIAS={};DIAS2={};ODO=0;KMS_MES=0;LAST_DAY=0;marcados={};
   MANTOS=[];LLANTAS=[];MANTO_TRAMOS=[];LLANTA_TRAMOS=[];
@@ -1480,6 +1636,34 @@ function abrirPDF(tipo){
 }
 
 // ── COMPARTIR POR WHATSAPP ────────────────────────────────────────────
+var MES3=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function fmtCorta(d){ return d.getDate()+MES3[d.getMonth()]; }
+
+// Rango real de días marcados (no el mes completo) — para nombrar el
+// archivo PDF como ABC123_tareo_15Jul-28Jul.pdf en vez de solo "Julio".
+function rangoDiasMarcados(){
+  var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
+  var m2sel=parseInt($('sel-m2').value),a2sel=parseInt($('sel-a2').value);
+  var dias=[];
+  Object.keys(marcados).forEach(function(k){
+    if(!marcados[k]) return;
+    var partes=k.split('_'),mesN=partes[0],d=parseInt(partes[1]);
+    var mes=mesN==='m1'?m1:m2sel, anio=mesN==='m1'?a1:a2sel;
+    if(!mes) return;
+    dias.push(new Date(anio,mes-1,d));
+  });
+  if(!dias.length) return null;
+  dias.sort(function(a,b){return a-b;});
+  return {ini:dias[0],fin:dias[dias.length-1]};
+}
+
+function nombreArchivoPDF(tipo){
+  var base=(VEH.placa||'').replace('-','')+'_'+(tipo==='Tareo'?'tareo':'valor');
+  var rango=rangoDiasMarcados();
+  if(rango) base+='_'+fmtCorta(rango.ini)+'-'+fmtCorta(rango.fin);
+  return base+'.pdf';
+}
+
 function datosCompartir(tipo){
   var ti=parseInt($('sel-t').value)||0,ci=parseInt($('sel-c').value)||0;
   var t=CFG.titulares[ti],c=CFG.clientes[ci];
@@ -1554,7 +1738,7 @@ function compartirWhatsApp(tipo){
   try{
     var blob=generarPDFBlob(tipo);
     if(blob && navigator.canShare){
-      var nombreArch=tipo.replace('ó','o')+'_'+VEH.placa+'.pdf';
+      var nombreArch=nombreArchivoPDF(tipo);
       var file=new File([blob],nombreArch,{type:'application/pdf'});
       if(navigator.canShare({files:[file]})){
         navigator.share({files:[file],title:tipo+' '+VEH.placa,text:resumen}).catch(function(){});
@@ -1693,12 +1877,16 @@ function renderHistorial(){
       elT.innerHTML='';
       histT.forEach(function(r){
         var d=document.createElement('div');
-        d.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:0.5px solid var(--border);gap:10px;';
+        d.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:0.5px solid var(--border);gap:10px;flex-wrap:wrap;';
         d.innerHTML='<div style="display:flex;align-items:center;gap:10px;">'+
           '<span style="padding:3px 10px;border-radius:99px;font-size:12px;font-weight:500;background:#E1F5EE;color:#0F6E56;border:1px solid #5DCAA5;">'+r.placa+'</span>'+
           '<div><div style="font-size:14px;font-weight:500;color:var(--text);">'+r.mes+'</div>'+
           '<div style="font-size:12px;color:var(--text2);">'+r.dias+' días · '+r.km_extra+' kms extra · Guardado '+r.fecha_guardado+'</div></div></div>'+
-          '<button onclick="cargarTareoDesdeHist('+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border);cursor:pointer;">↻ Cargar</button>';
+          '<div style="display:flex;gap:6px;">'+
+          '<button onclick="cargarTareoDesdeHist('+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border);cursor:pointer;">↻ Cargar</button>'+
+          '<button onclick="compartirDesdeHistorial(\'tareo\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border);cursor:pointer;">📤 Enviar</button>'+
+          '<button onclick="borrarDeHistorial(\'tareo\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--red-light);color:var(--red);border:0.5px solid #F0A0A0;cursor:pointer;">🗑</button>'+
+          '</div>';
         elT.appendChild(d);
       });
     }
@@ -1713,16 +1901,48 @@ function renderHistorial(){
       elV.innerHTML='';
       histV.forEach(function(r){
         var d=document.createElement('div');
-        d.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:0.5px solid var(--border);gap:10px;';
+        d.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:0.5px solid var(--border);gap:10px;flex-wrap:wrap;';
         d.innerHTML='<div style="display:flex;align-items:center;gap:10px;">'+
           '<span style="padding:3px 10px;border-radius:99px;font-size:12px;font-weight:500;background:#FAEEDA;color:#854F0B;border:1px solid #FAC775;">'+r.placa+'</span>'+
           '<div><div style="font-size:14px;font-weight:500;color:var(--text);">'+r.mes+' · '+r.cliente+'</div>'+
           '<div style="font-size:12px;color:var(--text2);">'+r.total+' · Neto '+r.neto+' · Guardado '+r.fecha_guardado+'</div></div></div>'+
-          '<button style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border);cursor:pointer;">↻ Cargar</button>';
+          '<div style="display:flex;gap:6px;">'+
+          '<button onclick="compartirDesdeHistorial(\'valorizacion\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--bg2);color:var(--text2);border:0.5px solid var(--border);cursor:pointer;">📤 Enviar</button>'+
+          '<button onclick="borrarDeHistorial(\'valorizacion\','+r.id+')" style="padding:6px 12px;border-radius:6px;font-size:12px;background:var(--red-light);color:var(--red);border:0.5px solid #F0A0A0;cursor:pointer;">🗑</button>'+
+          '</div>';
         elV.appendChild(d);
       });
     }
   }
+}
+
+// Reenvía un registro guardado (resumen en texto — no reconstruye el PDF
+// exacto, que depende de datos en vivo como cuentas bancarias/titular que
+// no se guardan en el historial; para el PDF completo, abrir esa placa y
+// usar "Enviar por WhatsApp" desde Tareo/Valorización).
+function compartirDesdeHistorial(tipo,id){
+  var key=tipo==='tareo'?HISTORIAL_KEY_T:HISTORIAL_KEY_V;
+  var hist=JSON.parse(localStorage.getItem(key)||'[]');
+  var r=hist.find(function(x){return x.id===id;});
+  if(!r) return;
+  var texto;
+  if(tipo==='tareo'){
+    texto='*Tareo · '+r.descripcion+' '+r.placa+'*\n'+r.mes+'\n\n'+
+      'Días trabajados: '+r.dias+'\nTotal kms extra: '+r.km_extra+'\nTotal kms marcados: '+r.km_total;
+  } else {
+    texto='*Valorización · '+r.placa+'*\n'+r.mes+' · '+r.cliente+'\n\n'+
+      'Días de alquiler: '+r.dias+'\nKms adicional: '+r.km_extra+'\nMonto total: '+r.total+'\nMonto a abonar (neto): '+r.neto;
+  }
+  window.open('https://wa.me/?text='+encodeURIComponent(texto),'_blank');
+}
+
+function borrarDeHistorial(tipo,id){
+  if(!confirm('¿Borrar este registro del historial? No se puede deshacer.')) return;
+  var key=tipo==='tareo'?HISTORIAL_KEY_T:HISTORIAL_KEY_V;
+  var hist=JSON.parse(localStorage.getItem(key)||'[]');
+  hist=hist.filter(function(x){return x.id!==id;});
+  localStorage.setItem(key,JSON.stringify(hist));
+  renderHistorial();
 }
 
 // ── STATUS ─────────────────────────────────────────────────────────────
