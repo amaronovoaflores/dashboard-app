@@ -53,6 +53,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);}
 .app-cliente-n{font-size:13px;font-weight:500;color:var(--gold-pale);}
 .app-cliente-r{font-size:11px;color:var(--muted);}
 
+/* MODO SIMPLE: header más bajo (sin el rótulo "Dashboard Flotas"),
+   nombre de empresa en mayúscula, menú más grande para el dedo. */
+.modo-simple .app-header{padding:0.85rem 1.1rem;}
+.modo-simple .app-logo{display:none;}
+.modo-simple .app-empresa{text-transform:uppercase;}
+.modo-simple .menubar .mbtn{padding:12px 4px;font-size:14px;}
+
 /* VEHICLE SELECTOR */
 .vehicle-bar{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;}
 .v-btn{padding:8px 14px;border-radius:var(--r);border:1px solid var(--border);background:white;font-size:13px;cursor:pointer;color:var(--text2);display:flex;align-items:center;gap:6px;transition:all .15s;}
@@ -60,6 +67,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);}
 .v-btn:hover:not(.active){background:var(--bg2);}
 .v-placa{font-weight:700;font-size:14px;}
 .v-desc{font-size:10px;opacity:.7;}
+/* Chip "incluido" (modo simple, Placas): marcado para tarear pero no es
+   el que se está viendo ahora — distinto del "activo" (navy+dorado). */
+.v-btn.incluido{background:var(--teal);border-color:#5DCAA5;color:var(--teal-mid);}
+.v-btn.incluido.active{background:var(--navy);color:var(--gold-pale);border-color:var(--gold);}
+.modo-simple .v-btn{padding:9px 12px;}
 
 /* SELECTOR SIMPLE (modo_simple) */
 .simple-placas-list{max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);padding:4px 14px;margin-bottom:1rem;background:white;}
@@ -92,6 +104,14 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
 .period-bar{display:flex;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap;}
 .pf{display:flex;flex-direction:column;gap:4px;}
 .pl{font-size:11px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:.05em;}
+/* MODO SIMPLE: mes+año principal y mes+año secundario en una sola línea,
+   incluso en celular (pisa el flex-direction:column del @media abajo por
+   especificidad — dos clases le gana a una). Sin etiquetas grandes arriba,
+   los meses se ven abreviados (Ene, Feb...) para que entren los 4 selects. */
+.modo-simple .period-bar{display:flex;flex-direction:row;flex-wrap:nowrap;gap:5px;margin-bottom:1rem;}
+.modo-simple .pf{flex:1;min-width:0;}
+.modo-simple .pl{display:none;}
+.modo-simple .period-bar select{width:100%;font-size:12px;padding:7px 3px;text-align:center;}
 .vehicle-pill{display:inline-flex;align-items:center;gap:8px;background:var(--teal);border:1px solid #5DCAA5;border-radius:var(--r);padding:6px 12px;margin-bottom:1rem;font-size:13px;color:var(--teal-mid);font-weight:500;}
 .drive-txt{display:flex;align-items:center;gap:8px;border:1px solid #5DCAA5;background:var(--teal);border-radius:var(--r);padding:8px 12px;margin-bottom:1rem;font-size:12px;color:var(--teal-mid);}
 
@@ -276,14 +296,14 @@ select{font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radi
 <!-- SELECTOR SIMPLE (modo_simple:true en config.json) — reemplaza el
      vehicle-bar de siempre + el config-bar (titular/cliente). El titular
      no se elige (ya se sabe cuál es); acá primero se define QUÉ placas se
-     van a tarear (por placa suelta o por cliente), recién ahí aparecen los
-     chips + el mes, y más abajo Tareo/Valorización. -->
+     van a tarear (chips: toca para incluir/activar en modo Placas, o elegí
+     un cliente y sus placas se arman solas), recién ahí el mes y más abajo
+     Tareo/Valorización. -->
 <div id="simple-selector" style="display:none;">
   <div class="tabs">
     <button class="tab-btn active" id="simple-tab-placas">Placas</button>
     <button class="tab-btn" id="simple-tab-cliente">Cliente</button>
   </div>
-  <div id="simple-placas-wrap" class="simple-placas-list"></div>
   <div id="simple-cliente-wrap" class="simple-cliente-wrap" style="display:none;">
     <select id="simple-cliente-sel"></select>
   </div>
@@ -765,6 +785,8 @@ function inicializarConConfig(){
 
 // ── MODO SIMPLE (minoristas sin experiencia) ─────────────────────────────
 function activarModoSimple(){
+  document.body.classList.add('modo-simple');
+
   // Header: sin "cliente" (recién se define abajo si es por cliente)
   var hc=$('h-cliente'), hcr=$('h-cliente-r');
   if(hc) hc.style.display='none';
@@ -772,10 +794,16 @@ function activarModoSimple(){
 
   // El menú de arriba ya no necesita "Tareo" ni "Valorización" — al elegir
   // placa(s) más abajo ya se cae directo a esa pantalla de trabajo (con su
-  // propio toggle Tareo/Valorización adentro). Queda Status/Mapa/Historial.
+  // propio toggle Tareo/Valorización adentro). Queda Status/Mapa/Historial,
+  // reubicado justo debajo del header (antes que el selector de placas).
   var mt=$('menu-tareo'), mvv=$('menu-val');
   if(mt) mt.style.display='none';
   if(mvv) mvv.style.display='none';
+  var menu=$('menubar');
+  if(menu){
+    menu.style.display='flex';
+    $('app-header').parentNode.insertBefore(menu,$('alertas-bar'));
+  }
 
   // Se ocultan el vehicle-bar y config-bar normales — los reemplaza
   // #simple-selector. El titular no se elige (ya se sabe cuál es): sel-t
@@ -791,39 +819,54 @@ function activarModoSimple(){
   // es el mismo <select> de siempre, no se duplica nada.
   var periodBar=document.querySelector('.period-bar');
   if(periodBar) $('simple-selector').appendChild(periodBar);
+  abreviarMeses();
+
+  // El subtítulo "Toyota Hilux · ABC-123" al lado de "Tareo y
+  // Valorización" ya no hace falta (la placa activa ya se ve arriba en
+  // los chips) — el título queda solo.
+  var t1sub=$('t1-sub'); if(t1sub) t1sub.style.display='none';
+
+  // La franja verde con la placa (v-pill) y el "Cargando datos…" (drive-txt)
+  // eran redundantes con los chips de arriba — se ocultan en modo simple.
+  var vp=$('v-pill'); if(vp) vp.style.display='none';
+  var dtx=$('drive-txt'); if(dtx) dtx.style.display='none';
+
+  // El toggle interno "Por placa / Por cliente" de Tareo queda oculto —
+  // esa elección ya se hizo arriba (Placas/Cliente). Se sigue el mismo
+  // modo automático (ver sincronizarModoTareoConSimple).
+  var tmt=$('tareo-modo-tabs'); if(tmt) tmt.style.display='none';
+
+  // Leyenda del calendario: no se trabaja con Excel con los clientes.
+  var legExcel=document.querySelector('.cal-legend span:first-child');
+  if(legExcel) legExcel.style.display='none';
 
   // Toggle Placas / Cliente
   $('simple-tab-placas').onclick=function(){
     SIMPLE_MODO='placas';
     $('simple-tab-placas').classList.add('active');$('simple-tab-cliente').classList.remove('active');
-    $('simple-placas-wrap').style.display='block';$('simple-cliente-wrap').style.display='none';
+    $('simple-cliente-wrap').style.display='none';
     renderSimpleChips();
   };
   $('simple-tab-cliente').onclick=function(){
     SIMPLE_MODO='cliente';
     $('simple-tab-cliente').classList.add('active');$('simple-tab-placas').classList.remove('active');
-    $('simple-placas-wrap').style.display='none';$('simple-cliente-wrap').style.display='block';
+    $('simple-cliente-wrap').style.display='block';
     renderSimpleChips();
   };
 
-  renderSimplePlacasCheck();
   renderSimpleClienteSel();
   renderSimpleChips();
 }
 
-function renderSimplePlacasCheck(){
-  var cont=$('simple-placas-wrap'); cont.innerHTML='';
-  CFG.vehiculos.forEach(function(v,i){
-    var row=document.createElement('label');
-    row.innerHTML='<input type="checkbox" data-idx="'+i+'" '+(SIMPLE_PLACAS_CHECK[i]?'checked':'')+'>'+
-      '<span>'+v.placa+' <span class="simple-placa-desc">'+(v.descripcion||'')+'</span></span>';
-    cont.appendChild(row);
-  });
-  cont.addEventListener('change',function(e){
-    if(e.target.type!=='checkbox') return;
-    var i=parseInt(e.target.dataset.idx);
-    SIMPLE_PLACAS_CHECK[i]=e.target.checked;
-    renderSimpleChips();
+// Meses abreviados (Ene, Feb...) en modo simple para que los 4 selects
+// (mes+año principal, mes+año secundario) entren en una sola línea.
+function abreviarMeses(){
+  [$('sel-m1'),$('sel-m2')].forEach(function(sel){
+    if(!sel) return;
+    Array.prototype.forEach.call(sel.options,function(o){
+      var v=parseInt(o.value);
+      if(v>=1&&v<=12) o.textContent=MES3[v-1];
+    });
   });
 }
 
@@ -840,6 +883,9 @@ function renderSimpleClienteSel(){
   };
 }
 
+// Placas incluidas en la sesión de hoy: en modo "cliente" son automáticas
+// (todas las asignadas a ese cliente); en modo "placas" son las que el
+// usuario marcó tocando su chip.
 function placasSeleccionadasSimple(){
   if(SIMPLE_MODO==='cliente'){
     var cli=CFG.clientes[SIMPLE_CLIENTE_IDX];
@@ -855,31 +901,73 @@ function placasSeleccionadasSimple(){
 
 function renderSimpleChips(){
   var cont=$('simple-chips'); cont.innerHTML='';
-  var idxs=placasSeleccionadasSimple();
-  idxs.forEach(function(i){
+  var idxsIncluidos=placasSeleccionadasSimple();
+  // En modo Placas se muestran TODAS como chips (para poder tocar y sumar
+  // más); en modo Cliente solo se muestran las de ese cliente (ya vienen
+  // todas incluidas, no hace falta marcar una por una).
+  var idxsAMostrar=SIMPLE_MODO==='placas'?CFG.vehiculos.map(function(v,i){return i;}):idxsIncluidos;
+
+  idxsAMostrar.forEach(function(i){
     var v=CFG.vehiculos[i];
+    var incluido=idxsIncluidos.indexOf(i)!==-1;
     var btn=document.createElement('button');
-    btn.className='v-btn'+(i===VEH_IDX?' active':'');
+    btn.className='v-btn'+(incluido?' incluido':'')+(incluido&&i===VEH_IDX?' active':'');
     btn.dataset.idx=i;
-    btn.innerHTML='🚛 <span class="v-placa">'+v.placa+'</span><span class="v-desc">'+v.descripcion+'</span>';
+    btn.innerHTML='<span class="v-placa">'+v.placa+'</span>';
     btn.onclick=function(){
+      if(SIMPLE_MODO==='placas'){
+        if(!SIMPLE_PLACAS_CHECK[i]){
+          SIMPLE_PLACAS_CHECK[i]=true; // no estaba incluida -> se incluye y pasa a activa
+        } else if(i===VEH_IDX){
+          SIMPLE_PLACAS_CHECK[i]=false; // ya era la activa -> se saca de la sesión
+          var restantes=placasSeleccionadasSimple().filter(function(x){return x!==i;});
+          if(restantes.length){ seleccionarVehiculo(restantes[0]); }
+          renderSimpleChips();
+          return;
+        }
+        // si ya estaba incluida pero no era la activa: solo pasa a activa
+      }
       seleccionarVehiculo(i);
       // Sin botones de Tareo/Valorización en el menú (modo simple): tocar
       // una placa te lleva directo a esa pantalla de trabajo, conservando
       // si estabas en Tareo o en Valorización.
       switchPage($('tab-val') && $('tab-val').classList.contains('active') ? 'val' : 'tareo');
+      renderSimpleChips();
     };
     cont.appendChild(btn);
   });
 
-  var hayPlacas=idxs.length>0;
-  var periodBar=document.querySelector('.period-bar');
-  if(periodBar) periodBar.style.display=hayPlacas?'flex':'none';
-  var menu=$('menubar'); if(menu) menu.style.display=hayPlacas?'flex':'none';
-  $('simple-placeholder').style.display=hayPlacas?'none':'block';
+  var hayIncluidos=idxsIncluidos.length>0;
+  $('simple-placeholder').style.display=hayIncluidos?'none':'block';
 
-  if(hayPlacas && idxs.indexOf(VEH_IDX)===-1){
-    seleccionarVehiculo(idxs[0]);
+  if(hayIncluidos && idxsIncluidos.indexOf(VEH_IDX)===-1){
+    seleccionarVehiculo(idxsIncluidos[0]);
+  }
+
+  sincronizarModoTareoConSimple();
+}
+
+// El toggle interno "Por placa / Por cliente" de Tareo queda oculto en
+// modo simple (Parte 5.10/11) — se sigue automático según la elección de
+// arriba: modo Cliente -> mismo resumen que antes daba "Por cliente"
+// (una placa debajo de otra con sus kms), modo Placas -> calendario normal.
+function sincronizarModoTareoConSimple(){
+  if(!MODO_SIMPLE) return;
+  var vp=$('tareo-vista-placa'), vc=$('tareo-vista-cliente');
+  if(SIMPLE_MODO==='cliente'){
+    TAREO_MODO='cliente';
+    if(vp) vp.style.display='none';
+    if(vc) vc.style.display='block';
+    renderTareoCliente();
+    var cli=CFG.clientes[SIMPLE_CLIENTE_IDX];
+    if(cli){
+      var sel=$('tareo-cliente-sel');
+      if(sel){ sel.value=cli.nombre; pintarTareoClienteTabla(); }
+    }
+  } else {
+    TAREO_MODO='placa';
+    if(vp) vp.style.display='block';
+    if(vc) vc.style.display='none';
   }
 }
 
@@ -1570,8 +1658,47 @@ function updateConcl(){
 }
 
 // ── PDF ────────────────────────────────────────────────────────────────
+// PDF "por cliente" (modo simple, vista Imprimir/PDF): empresa + cliente
+// + una fila por placa con sus días/kms, igual criterio que el resumen
+// que ya se ve en pantalla y que el PDF de WhatsApp (generarPDFBlobCliente).
+function abrirPDFCliente(tipo){
+  var ti=parseInt($('sel-t').value)||0,t=CFG.titulares[ti];
+  var r=resumenClientePeriodo(tipo);
+  var w=window.open('','_blank');
+  var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+tipo+' '+(r.cliente?r.cliente.nombre:'')+'</title>';
+  h+='<style>body{font-family:-apple-system,sans-serif;padding:30px;max-width:800px;margin:0 auto;}';
+  h+='h2{color:#0d1b2a;border-bottom:2px solid #BA7517;padding-bottom:8px;margin-bottom:16px;}';
+  h+='.hdr{display:flex;justify-content:space-between;margin-bottom:20px;font-size:13px;}';
+  h+='table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:1rem;}';
+  h+='th{background:#0d1b2a;color:#e8f4f0;padding:9px 12px;text-align:left;font-weight:500;}';
+  h+='td{padding:9px 12px;border-bottom:1px solid #dee2e6;}';
+  h+='.r{text-align:right;font-weight:500;}';
+  h+='button{background:#0d1b2a;color:#FAC775;border:1px solid #BA7517;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:13px;margin-top:16px;}';
+  h+='@media print{button{display:none!important;}@page{size:A4;margin:15mm;}}';
+  h+='</style></head><body>';
+  h+='<div class="hdr"><div><strong>'+t.nombre+'</strong><br><small>'+t.ruc+'</small></div>';
+  h+='<div style="text-align:right"><strong>'+(r.cliente?r.cliente.nombre:'—')+'</strong><br><small>'+(r.cliente?r.cliente.ruc:'')+'</small></div></div>';
+  h+='<h2>'+tipo+' · '+(r.cliente?r.cliente.nombre:'')+' · '+r.periodo+'</h2>';
+  if(tipo==='Tareo'){
+    h+='<table><thead><tr><th>Placa</th><th>Descripción</th><th class="r">Días</th><th class="r">Kms extra</th><th class="r">Kms marcados</th></tr></thead><tbody>';
+    r.filas.forEach(function(f){
+      h+='<tr><td>'+f.placa+'</td><td>'+(f.descripcion||'—')+'</td><td class="r">'+(f.reg?f.reg.dias:'—')+'</td><td class="r">'+(f.reg?f.reg.km_extra+' kms':'—')+'</td><td class="r">'+(f.reg?f.reg.km_total+' kms':'—')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+  } else {
+    h+='<table><thead><tr><th>Placa</th><th class="r">Días</th><th class="r">Kms extra</th><th class="r">Total</th><th class="r">Neto</th></tr></thead><tbody>';
+    r.filas.forEach(function(f){
+      h+='<tr><td>'+f.placa+'</td><td class="r">'+(f.reg?f.reg.dias:'—')+'</td><td class="r">'+(f.reg?f.reg.km_extra:'—')+'</td><td class="r">'+(f.reg?f.reg.total:'—')+'</td><td class="r">'+(f.reg?f.reg.neto:'—')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+  }
+  h+='<button onclick="window.print()">🖨 Imprimir / Guardar PDF</button></body></html>';
+  w.document.write(h);w.document.close();
+}
+
 function abrirPDF(tipo){
   if(!CFG||!VEH)return;
+  if(MODO_SIMPLE && SIMPLE_MODO==='cliente'){ abrirPDFCliente(tipo); return; }
   var ti=parseInt($('sel-t').value)||0,ci=parseInt($('sel-c').value)||0;
   var t=CFG.titulares[ti],c=CFG.clientes[ci];
   var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
@@ -1671,7 +1798,10 @@ function rangoDiasMarcados(){
 }
 
 function nombreArchivoPDF(tipo){
-  var base=(VEH.placa||'').replace('-','')+'_'+(tipo==='Tareo'?'tareo':'valor');
+  var esCliente=MODO_SIMPLE && SIMPLE_MODO==='cliente';
+  var cli=esCliente?CFG.clientes[SIMPLE_CLIENTE_IDX]:null;
+  var base=esCliente&&cli ? (cli.nombre.replace(/[^a-zA-Z0-9]+/g,'')) : (VEH.placa||'').replace('-','');
+  base+='_'+(tipo==='Tareo'?'tareo':'valor');
   var rango=rangoDiasMarcados();
   if(rango) base+='_'+fmtCorta(rango.ini)+'-'+fmtCorta(rango.fin);
   return base+'.pdf';
@@ -1686,7 +1816,43 @@ function datosCompartir(tipo){
   return {t:t,c:c,periodo:periodo};
 }
 
+// Junta, por cada placa del cliente elegido, el último tareo/valorización
+// GUARDADO para el período actual (mismos datos que ya arma
+// pintarTareoClienteTabla() para la tabla en pantalla) — se usa para
+// armar el PDF/WhatsApp "por cliente": empresa, cliente, una placa debajo
+// de otra con sus días/kms.
+function resumenClientePeriodo(tipo){
+  var cli=CFG.clientes[SIMPLE_CLIENTE_IDX];
+  var m1=parseInt($('sel-m1').value),a1=parseInt($('sel-a1').value);
+  var m2sel=parseInt($('sel-m2').value),a2sel=parseInt($('sel-a2').value);
+  var periodo=MNOM[m1]+' '+a1+(m2sel>0?' + '+MNOM[m2sel]+' '+a2sel:'');
+  if(!cli) return {cliente:null,periodo:periodo,filas:[]};
+  var vehs=CFG.vehiculos.filter(function(v){return v.asignado===cli.nombre;});
+  var key=tipo==='Tareo'?HISTORIAL_KEY_T:HISTORIAL_KEY_V;
+  var hist=JSON.parse(localStorage.getItem(key)||'[]');
+  var filas=vehs.map(function(v){
+    var reg=tipo==='Tareo'
+      ? hist.find(function(h){return h.placa===v.placa&&h.m1===m1&&h.a1===a1;})
+      : hist.find(function(h){return h.placa===v.placa&&h.mes===periodo;});
+    return {placa:v.placa,descripcion:v.descripcion,reg:reg};
+  });
+  return {cliente:cli,periodo:periodo,filas:filas};
+}
+
 function construirResumenTexto(tipo){
+  if(MODO_SIMPLE && SIMPLE_MODO==='cliente'){
+    var ti0=parseInt($('sel-t').value)||0,t0=CFG.titulares[ti0];
+    var r=resumenClientePeriodo(tipo);
+    var txt0='*'+tipo+' · '+(r.cliente?r.cliente.nombre:'')+'*\n'+r.periodo+'\n'+t0.nombre+'\n\n';
+    r.filas.forEach(function(f){
+      txt0+=f.placa+': ';
+      if(!f.reg){ txt0+='sin guardar\n'; return; }
+      txt0+=tipo==='Tareo'
+        ? (f.reg.dias+' días · '+f.reg.km_extra+' kms extra\n')
+        : (f.reg.dias+' días · '+f.reg.total+' · Neto '+f.reg.neto+'\n');
+    });
+    return txt0;
+  }
   var d=datosCompartir(tipo);
   var txt='*'+tipo+' · '+VEH.descripcion+' '+VEH.placa+'*\n'+d.periodo+'\n'+d.t.nombre+' → '+d.c.nombre+'\n\n';
   if(tipo==='Tareo'){
@@ -1703,8 +1869,37 @@ function construirResumenTexto(tipo){
   return txt;
 }
 
+// PDF "por cliente" (modo simple): empresa + cliente + una fila por placa
+// con sus días/kms — mismo criterio que el resumen que se ve en pantalla.
+function generarPDFBlobCliente(tipo){
+  if(typeof jspdf==='undefined')return null;
+  var ti=parseInt($('sel-t').value)||0,t=CFG.titulares[ti];
+  var r=resumenClientePeriodo(tipo);
+  var doc=new jspdf.jsPDF();
+  doc.setFontSize(9);doc.setTextColor(100);
+  doc.text(t.nombre+' ('+t.ruc+')',14,15);
+  doc.text((r.cliente?r.cliente.nombre+' ('+r.cliente.ruc+')':''),14,21);
+  doc.setFontSize(14);doc.setTextColor(13,27,42);
+  doc.text(tipo+' · '+(r.cliente?r.cliente.nombre:'')+' · '+r.periodo,14,32);
+  var head,body;
+  if(tipo==='Tareo'){
+    head=[['Placa','Descripción','Días','Kms extra','Kms marcados']];
+    body=r.filas.map(function(f){
+      return [f.placa,f.descripcion||'—',f.reg?String(f.reg.dias):'—',f.reg?f.reg.km_extra+' kms':'—',f.reg?f.reg.km_total+' kms':'—'];
+    });
+  } else {
+    head=[['Placa','Días','Kms extra','Total','Neto']];
+    body=r.filas.map(function(f){
+      return [f.placa,f.reg?String(f.reg.dias):'—',f.reg?String(f.reg.km_extra):'—',f.reg?f.reg.total:'—',f.reg?f.reg.neto:'—'];
+    });
+  }
+  doc.autoTable({startY:38,head:head,body:body,headStyles:{fillColor:[13,27,42]},styles:{fontSize:9}});
+  return doc.output('blob');
+}
+
 function generarPDFBlob(tipo){
   if(typeof jspdf==='undefined')return null;
+  if(MODO_SIMPLE && SIMPLE_MODO==='cliente') return generarPDFBlobCliente(tipo);
   var d=datosCompartir(tipo);
   var doc=new jspdf.jsPDF();
   doc.setFontSize(9);doc.setTextColor(100);
