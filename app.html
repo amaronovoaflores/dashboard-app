@@ -770,6 +770,13 @@ function activarModoSimple(){
   if(hc) hc.style.display='none';
   if(hcr) hcr.style.display='none';
 
+  // El menú de arriba ya no necesita "Tareo" ni "Valorización" — al elegir
+  // placa(s) más abajo ya se cae directo a esa pantalla de trabajo (con su
+  // propio toggle Tareo/Valorización adentro). Queda Status/Mapa/Historial.
+  var mt=$('menu-tareo'), mvv=$('menu-val');
+  if(mt) mt.style.display='none';
+  if(mvv) mvv.style.display='none';
+
   // Se ocultan el vehicle-bar y config-bar normales — los reemplaza
   // #simple-selector. El titular no se elige (ya se sabe cuál es): sel-t
   // sigue existiendo oculto con su valor por defecto para no romper el
@@ -855,7 +862,13 @@ function renderSimpleChips(){
     btn.className='v-btn'+(i===VEH_IDX?' active':'');
     btn.dataset.idx=i;
     btn.innerHTML='🚛 <span class="v-placa">'+v.placa+'</span><span class="v-desc">'+v.descripcion+'</span>';
-    btn.onclick=function(){seleccionarVehiculo(i);};
+    btn.onclick=function(){
+      seleccionarVehiculo(i);
+      // Sin botones de Tareo/Valorización en el menú (modo simple): tocar
+      // una placa te lleva directo a esa pantalla de trabajo, conservando
+      // si estabas en Tareo o en Valorización.
+      switchPage($('tab-val') && $('tab-val').classList.contains('active') ? 'val' : 'tareo');
+    };
     cont.appendChild(btn);
   });
 
